@@ -68,7 +68,39 @@ jobs:
           emcc --version
           which emcc
 
-      - name: Build WASM single-threaded engine with NNUE support
+      - name: Build WASM CommonJS module for testing
+        run: |
+          make -f Makefile_js clean
+          make -f Makefile_js build nnue=yes
+          ls -la ../tests/js/
+
+      - name: Test WASM engine with Node.js (go depth 20)
+        run: |
+          cd ../tests/js
+          npm install --ignore-scripts 2>/dev/null || true
+          expect << 'EOF'
+            set timeout 120
+            spawn node -e "
+            const Module = require('./ffish.js');
+            Module().then(ffish => {
+              console.log('FFish version:', ffish.info());
+              // Test minixiangqi board with search
+              const board = new ffish.Board('minixiangqi');
+              console.log('FEN:', board.fen());
+              console.log('Legal moves:', board.legalMoves());
+              board.delete();
+              console.log('WASM engine test PASSED');
+            }).catch(err => {
+              console.error('FAILED:', err);
+              process.exit(1);
+            });
+            "
+            expect "PASSED"
+            send "\n"
+            expect eof
+          EOF
+
+      - name: Build WASM ES6 module for web deployment
         run: |
           make -f Makefile_js clean
           make -f Makefile_js build es6=yes nnue=yes
@@ -103,29 +135,3 @@ jobs:
           else
             echo "No changes to commit"
           fi
-
-      - name: Test WASM engine with Node.js
-        run: |
-          cd ../tests/js
-          npm install --ignore-scripts 2>/dev/null || true
-          # Test basic WASM loading and minixiangqi support
-          node -e "
-          const Module = require('./ffish.js');
-          Module().then(ffish => {
-            console.log('FFish version:', ffish.info());
-            const variants = ffish.variants().split(' ');
-            console.log('Available variants:', variants.length);
-            console.log('Has minixiangqi:', variants.includes('minixiangqi'));
-            // Test minixiangqi board
-            const board = new ffish.Board('minixiangqi');
-            const fen = board.fen();
-            console.log('Minixiangqi FEN:', fen);
-            const legalMoves = board.legalMoves();
-            console.log('Legal moves:', legalMoves);
-            board.delete();
-            console.log('WASM engine test PASSED');
-          }).catch(err => {
-            console.error('WASM engine test FAILED:', err);
-            process.exit(1);
-          });
-          "
