@@ -425,6 +425,63 @@ public:
     return "unknown";
   }
 
+  // Returns structured board data for web rendering as JSON-like string
+  std::string board_data() {
+    std::stringstream ss;
+    ss << "{";
+    ss << "\"variant\":\"" << variant() << "\",";
+    ss << "\"fen\":\"" << pos.fen() << "\",";
+    ss << "\"turn\":" << (pos.side_to_move() == WHITE ? "true" : "false") << ",";
+    ss << "\"fullmoveNumber\":" << (pos.game_ply() / 2 + 1) << ",";
+    ss << "\"halfmoveClock\":" << pos.rule50_count() << ",";
+    ss << "\"files\":" << (pos.max_file() + 1) << ",";
+    ss << "\"ranks\":" << (pos.max_rank() + 1) << ",";
+    ss << "\"isCheck\":" << (Stockfish::checked(pos) ? "true" : "false") << ",";
+    ss << "\"board\":[";
+    // Board data: pieces from top rank to bottom rank
+    for (Rank r = pos.max_rank(); r >= RANK_1; --r) {
+      if (r != pos.max_rank()) ss << ",";
+      ss << "[";
+      for (File f = FILE_A; f <= pos.max_file(); ++f) {
+        if (f != FILE_A) ss << ",";
+        Square sq = make_square(f, r);
+        Piece p = pos.piece_on(sq);
+        if (p == NO_PIECE) {
+          ss << "\"\"";
+        } else {
+          // Check if piece is promoted (shogi-style)
+          bool promoted = pos.is_promoted(sq);
+          ss << "\"" << pos.piece_to_char()[p] << (promoted ? "~" : "") << "\"";
+        }
+      }
+      ss << "]";
+    }
+    ss << "],";
+    // Checked pieces
+    ss << "\"checkedPieces\":\"";
+    Bitboard checked = Stockfish::checked(pos);
+    while (checked) {
+      Square sr = pop_lsb(checked);
+      ss << UCI::square(pos, sr) << " ";
+    }
+    ss << "\",";
+    // Pocket pieces
+    ss << "\"pocket\":{";
+    ss << "\"white\":\"";
+    for (PieceType pt = KING; pt >= PAWN; --pt) {
+      for (int i = 0; i < pos.count_in_hand(WHITE, pt); ++i)
+        ss << pos.piece_to_char()[make_piece(BLACK, pt)];
+    }
+    ss << "\",\"black\":\"";
+    for (PieceType pt = KING; pt >= PAWN; --pt) {
+      for (int i = 0; i < pos.count_in_hand(BLACK, pt); ++i)
+        ss << pos.piece_to_char()[make_piece(WHITE, pt)];
+    }
+    ss << "\"}";
+    ss << "}";
+    return ss.str();
+  }
+
 private:
   void resetStates() {
     this->states = StateListPtr(new std::deque<StateInfo>(1));
@@ -724,7 +781,8 @@ EMSCRIPTEN_BINDINGS(ffish_js) {
     .function("pocket", &Board::pocket)
     .function("toString", &Board::to_string)
     .function("toVerboseString", &Board::to_verbose_string)
-    .function("variant", &Board::variant);
+    .function("variant", &Board::variant)
+    .function("boardData", &Board::board_data);
   class_<Game>("Game")
     .function("headerKeys", &Game::header_keys)
     .function("headers", &Game::headers)

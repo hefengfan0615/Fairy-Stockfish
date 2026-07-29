@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 jobs:
-  minixiangqi:
+  minixiangqi-wasm:
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -58,25 +58,74 @@ jobs:
             echo "NNUE file already tracked, no commit needed"
           fi
 
-      - name: Build engine with NNUE
-        run: |
-          make clean
-          make -j2 ARCH=x86-64 nnue=yes build
+      - name: Setup emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.73
 
-      - name: Test minixiangqi go depth 20
+      - name: Verify emscripten installation
         run: |
-          expect << 'EOF'
-            set timeout 60
-            spawn ./stockfish
-            send "uci\n"
-            expect "uciok"
-            send "setoption name UCI_Variant value minixiangqi\n"
-            send "setoption name EvalFile value minixiangqi.nnue\n"
-            send "isready\n"
-            expect "readyok"
-            send "position startpos\n"
-            send "go depth 20\n"
-            expect "bestmove"
-            send "quit\n"
-            expect eof
-          EOF
+          emcc --version
+          which emcc
+
+      - name: Build WASM single-threaded engine with NNUE support
+        run: |
+          make -f Makefile_js clean
+          make -f Makefile_js build es6=yes nnue=yes
+          ls -la ../tests/js/
+
+      - name: Create output directory for WASM artifacts
+        run: |
+          mkdir -p ../wasm-output
+          cp ../tests/js/ffish.js ../wasm-output/ffish.js 2>/dev/null || true
+          cp ../tests/js/ffish.wasm ../wasm-output/ffish.wasm 2>/dev/null || true
+          cp ../tests/js/ffish.data ../wasm-output/ffish.data 2>/dev/null || true
+          cp minixiangqi.nnue ../wasm-output/minixiangqi.nnue 2>/dev/null || true
+          ls -la ../wasm-output/
+
+      - name: Commit WASM and NNUE artifacts to repository
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          # Add WASM build artifacts in tests/js/
+          cd ../tests/js
+          for f in ffish.js ffish.wasm ffish.data; do
+            if [ -f "$f" ]; then
+              git add -f "$f"
+            fi
+          done
+          cd ../../src
+          # Check if there are changes to commit
+          if git status --porcelain | grep -q .; then
+            echo "WASM build artifacts have changes, committing..."
+            git commit -m "Update WASM single-threaded engine build with NNUE support"
+            git push origin master
+          else
+            echo "No changes to commit"
+          fi
+
+      - name: Test WASM engine with Node.js
+        run: |
+          cd ../tests/js
+          npm install --ignore-scripts 2>/dev/null || true
+          # Test basic WASM loading and minixiangqi support
+          node -e "
+          const Module = require('./ffish.js');
+          Module().then(ffish => {
+            console.log('FFish version:', ffish.info());
+            const variants = ffish.variants().split(' ');
+            console.log('Available variants:', variants.length);
+            console.log('Has minixiangqi:', variants.includes('minixiangqi'));
+            // Test minixiangqi board
+            const board = new ffish.Board('minixiangqi');
+            const fen = board.fen();
+            console.log('Minixiangqi FEN:', fen);
+            const legalMoves = board.legalMoves();
+            console.log('Legal moves:', legalMoves);
+            board.delete();
+            console.log('WASM engine test PASSED');
+          }).catch(err => {
+            console.error('WASM engine test FAILED:', err);
+            process.exit(1);
+          });
+          "

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mini Xiangqi - Fairy-Stockfish WASM</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+  <h1>Mini Xiangqi <span class="subtitle">(迷你象棋)</span></h1>
+  <div class="status-bar">
+    <div id="status" class="status-loading">Loading engine...</div>
+  </div>
+  <div class="main-layout">
+    <div class="board-section">
+      <div id="board-container">
+        <div id="board-display" class="board-display"></div>
+      </div>
+      <div class="board-info">
+        <div id="info-fen" class="info-item">FEN: -</div>
+        <div id="info-turn" class="info-item">Turn: -</div>
+        <div id="info-moves" class="info-item">Legal moves: -</div>
+      </div>
+    </div>
+    <div class="controls-section">
+      <div class="control-group">
+        <label for="variant-select">Variant:</label>
+        <select id="variant-select">
+          <option value="minixiangqi" selected>Mini Xiangqi</option>
+          <option value="xiangqi">Xiangqi</option>
+          <option value="chess">Chess</option>
+          <option value="shogi">Shogi</option>
+          <option value="janggi">Janggi</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label for="fen-input">FEN:</label>
+        <input type="text" id="fen-input" placeholder="Enter FEN string or leave empty for start position">
+      </div>
+      <div class="control-group">
+        <label for="search-depth">Search Depth:</label>
+        <select id="search-depth">
+          <option value="10">10</option>
+          <option value="12" selected>12</option>
+          <option value="15">15</option>
+          <option value="18">18</option>
+          <option value="20">20</option>
+        </select>
+      </div>
+      <div class="button-group">
+        <button id="btn-new-game" class="btn btn-primary">New Game</button>
+        <button id="btn-set-fen" class="btn btn-secondary">Set FEN</button>
+        <button id="btn-ai-move" class="btn btn-accent">AI Move</button>
+        <button id="btn-undo" class="btn btn-danger">Undo</button>
+      </div>
+      <div class="move-history">
+        <h3>Move History</h3>
+        <div id="move-history" class="move-list"></div>
+      </div>
+      <div class="engine-output">
+        <h3>Engine Output</h3>
+        <pre id="engine-output" class="engine-output-text">Waiting...</pre>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="ffish.js"></script>
+<script src="script.js"></script>
+</body>
+</html>

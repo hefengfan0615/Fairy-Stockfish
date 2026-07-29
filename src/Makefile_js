@@ -24,7 +24,7 @@ SRCS = ffishjs.cpp benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.c
 	nnue/features/half_ka_v2_variants.cpp
 
 CXX=emcc
-CXXFLAGS += --bind -DNNUE_EMBEDDING_OFF -DNO_THREADS -std=c++17 -Wall
+CXXFLAGS += --bind -DNO_THREADS -DNNUE_EMBEDDING_OFF -std=c++17 -Wall
 
 largeboards = yes
 all = yes
@@ -54,6 +54,11 @@ ifneq ($(all),no)
 	CXXFLAGS += -DALLVARS
 endif
 
+# NNUE support: preload the minixiangqi NNUE file into the virtual filesystem
+ifeq ($(nnue),yes)
+	CXXFLAGS += -s FORCE_FILESYSTEM=1 --preload-file minixiangqi.nnue
+endif
+
 ### Compile as ES6/ES2015 module
 ifeq ($(es6),yes)
 	CXXFLAGS += -s ENVIRONMENT='web,worker' -s EXPORT_ES6=1 -s MODULARIZE=1 -s USE_ES6_IMPORT_META=0
@@ -78,7 +83,7 @@ help:
 	@echo ""
 
 objclean:
-	@rm -f $(EXE)
+	@rm -f $(EXE) $(EXE:.js=.wasm) $(EXE:.js=.data)
 
 clean: objclean
 

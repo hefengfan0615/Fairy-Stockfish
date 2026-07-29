@@ -25,6 +25,10 @@ tests/syzygy
 # ffishjs
 tests/js/node_modules
 ffish.js
+# Allow WASM files in tests/js to be tracked
+!/tests/js/*.wasm
+!/tests/js/*.data
+# Block other wasm files
 *.wasm
 
 # pyffish
