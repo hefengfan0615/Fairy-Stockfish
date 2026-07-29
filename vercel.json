@@ -1,6 +1,6 @@
 {
-  "buildCommand": "cp tests/js/ffish.js web/ffish.js && cp tests/js/ffish.wasm web/ffish.wasm && cp tests/js/ffish.data web/ffish.data 2>/dev/null; cp src/minixiangqi.nnue web/minixiangqi.nnue 2>/dev/null; echo 'Build complete'",
-  "outputDirectory": "web",
+  "buildCommand": "cp tests/js/ffish.js ./ffish.js && cp tests/js/ffish.wasm ./ffish.wasm && cp tests/js/ffish.data ./ffish.data 2>/dev/null; cp src/minixiangqi.nnue ./minixiangqi.nnue 2>/dev/null; echo 'Build complete'",
+  "outputDirectory": ".",
   "installCommand": "",
   "framework": null,
   "rewrites": [

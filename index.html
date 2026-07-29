@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>迷你象棋 Mini Xiangqi</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: #e8e8e8;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+  }
+  header {
+    text-align: center;
+    margin-bottom: 12px;
+  }
+  h1 {
+    color: #e94560;
+    font-size: 1.6em;
+    letter-spacing: 2px;
+  }
+  h1 .sub {
+    font-size: 0.55em;
+    color: #888;
+    margin-left: 6px;
+    letter-spacing: 1px;
+  }
+  #status {
+    display: inline-block;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    margin-top: 8px;
+    background: #16213e;
+    border: 1px solid #333;
+  }
+  #status.loading { color: #ffd700; }
+  #status.ready { color: #4caf50; }
+  #status.thinking { color: #ffd700; }
+  #status.error { color: #f44336; }
+  #status.over { color: #e94560; }
+
+  .stage {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  .board-wrap {
+    background: #16213e;
+    padding: 18px;
+    border-radius: 10px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.35);
+  }
+
+  .board {
+    display: grid;
+    grid-template-columns: 32px repeat(7, 56px) 32px;
+    grid-template-rows: 32px repeat(7, 56px) 32px;
+    background:
+      repeating-linear-gradient(0deg, transparent 0 55px, rgba(0,0,0,0.18) 55px 56px),
+      repeating-linear-gradient(90deg, transparent 0 55px, rgba(0,0,0,0.18) 55px 56px),
+      linear-gradient(135deg, #d9a96e 0%, #c89054 100%);
+    border: 3px solid #5a3e1b;
+    border-radius: 4px;
+    position: relative;
+    user-select: none;
+  }
+
+  .board-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #5a3e1b;
+    font-weight: 600;
+    font-size: 13px;
+  }
+
+  .cell {
+    width: 56px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .piece {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    font-weight: 700;
+    background: radial-gradient(circle at 30% 30%, #f5e6c8, #d9b98a);
+    color: #2a1a0a;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.4), inset 0 -2px 3px rgba(0,0,0,0.15);
+    border: 1.5px solid #6b4a1f;
+    transition: transform 0.15s;
+    font-family: "STKaiti", "KaiTi", "STSong", "SimSun", serif;
+  }
+  .piece.black {
+    background: radial-gradient(circle at 30% 30%, #5a4a3a, #2a1a0a);
+    color: #f5e6c8;
+    border-color: #1a0a00;
+  }
+  .piece:hover { transform: scale(1.06); }
+
+  .cell.selected .piece {
+    box-shadow: 0 0 0 3px #4caf50, 0 2px 4px rgba(0,0,0,0.4);
+  }
+  .cell.check .piece {
+    box-shadow: 0 0 0 3px #f44336, 0 2px 4px rgba(0,0,0,0.4);
+  }
+
+  .legal-dot {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: rgba(76, 175, 80, 0.7);
+    pointer-events: none;
+  }
+  .legal-capture {
+    position: absolute;
+    inset: 4px;
+    border-radius: 50%;
+    border: 3px solid rgba(76, 175, 80, 0.75);
+    pointer-events: none;
+  }
+
+  .cell.last-move::after {
+    content: "";
+    position: absolute;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(255, 235, 59, 0.18);
+    pointer-events: none;
+  }
+
+  .side {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 240px;
+  }
+
+  .panel {
+    background: #16213e;
+    border: 1px solid #2a3a5a;
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .panel h3 {
+    font-size: 13px;
+    color: #aaa;
+    margin-bottom: 8px;
+    font-weight: 500;
+  }
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    padding: 2px 0;
+  }
+  .info-row span:last-child { color: #4caf50; font-weight: 600; }
+
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .controls .full { grid-column: 1 / -1; }
+  .btn {
+    padding: 10px 12px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    background: #0f3460;
+    color: #fff;
+    transition: all 0.15s;
+  }
+  .btn:hover:not(:disabled) { background: #1a4a80; transform: translateY(-1px); }
+  .btn:active:not(:disabled) { transform: translateY(0); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn.primary { background: #e94560; }
+  .btn.primary:hover:not(:disabled) { background: #ff5a70; }
+  .btn.accent { background: #4caf50; }
+  .btn.accent:hover:not(:disabled) { background: #5cbf60; }
+
+  .depth {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #aaa;
+  }
+  .depth select {
+    flex: 1;
+    padding: 6px;
+    background: #0f3460;
+    color: #fff;
+    border: 1px solid #2a3a5a;
+    border-radius: 4px;
+  }
+
+  .moves {
+    max-height: 180px;
+    overflow-y: auto;
+    font-family: "Courier New", monospace;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .moves:empty::before {
+    content: "(暂无走棋)";
+    color: #555;
+    font-family: inherit;
+  }
+  .moves .ply { display: inline-block; min-width: 28px; color: #888; }
+  .moves .white { color: #fff; }
+  .moves .black { color: #ffd700; }
+
+  .turn-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .turn-tag.white { background: #fff; color: #000; }
+  .turn-tag.black { background: #1a1a1a; color: #ffd700; }
+
+  @media (max-width: 800px) {
+    .board { grid-template-columns: 24px repeat(7, 44px) 24px; grid-template-rows: 24px repeat(7, 44px) 24px; }
+    .cell { width: 44px; height: 44px; }
+    .piece { width: 36px; height: 36px; font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>迷你象棋<span class="sub">Mini Xiangqi</span></h1>
+  <div id="status" class="loading">正在加载引擎…</div>
+</header>
+
+<div class="stage">
+  <div class="board-wrap">
+    <div id="board" class="board"></div>
+  </div>
+
+  <div class="side">
+    <div class="panel">
+      <h3>对局信息</h3>
+      <div class="info-row"><span>回合</span><span><span id="turn-tag" class="turn-tag white">红</span></span></div>
+      <div class="info-row"><span>回合数</span><span id="ply">0</span></div>
+      <div class="info-row"><span>合法着法</span><span id="legal-count">-</span></div>
+      <div class="info-row"><span>结果</span><span id="result">-</span></div>
+    </div>
+
+    <div class="panel">
+      <h3>操作</h3>
+      <div class="depth">
+        <label for="depth">AI 深度:</label>
+        <select id="depth">
+          <option value="1">1 (最快)</option>
+          <option value="2" selected>2 (普通)</option>
+          <option value="3">3 (较强)</option>
+          <option value="4">4 (最强)</option>
+        </select>
+      </div>
+      <div class="controls" style="margin-top: 10px;">
+        <button id="btn-new" class="btn primary full">新对局</button>
+        <button id="btn-ai" class="btn accent">AI 走棋</button>
+        <button id="btn-undo" class="btn">悔棋</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>着法记录</h3>
+      <div id="moves" class="moves"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import Module from "./ffish.js";
+
+"use strict";
+
+const VARIANT = "minixiangqi";
+
+// 棋子显示字符: 白(红) / 黑
+const PIECE_GLYPH = {
+  K: "帥", R: "俥", N: "傌", C: "炮", P: "兵",
+  k: "將", r: "車", n: "馬", c: "砲", p: "卒",
+};
+
+const PIECE_VALUE = { K: 10000, R: 900, N: 400, C: 450, P: 100 };
+
+// 子力位置加成（红方视角，rank 从 0..6 表示从下到上）
+// 用于简易评估
+const PAWN_BONUS = [
+  [  0,  0,  0,  0,  0,  0,  0],
+  [  0,  0,  0,  0,  0,  0,  0],
+  [ 10, 20, 30, 40, 30, 20, 10],
+  [ 20, 30, 50, 60, 50, 30, 20],
+  [ 20, 30, 50, 60, 50, 30, 20],
+  [ 30, 40, 60, 70, 60, 40, 30],
+  [ 40, 50, 70, 80, 70, 50, 40],
+];
+const KNIGHT_BONUS = [
+  [  0,  0,  0,  0,  0,  0,  0],
+  [  0,  0,  0,  0,  0,  0,  0],
+  [  0,  0, 10, 15, 10,  0,  0],
+  [  0, 10, 20, 25, 20, 10,  0],
+  [  0, 10, 20, 25, 20, 10,  0],
+  [  0,  0, 10, 15, 10,  0,  0],
+  [  0,  0,  0,  0,  0,  0,  0],
+];
+
+let ffish = null;
+let board = null;
+let moveHistory = [];
+let selectedSq = null;
+let legalForSelected = [];
+let isAIThinking = false;
+let lastMove = null; // { from, to }
+
+const $ = (id) => document.getElementById(id);
+const statusEl = $("status");
+const boardEl = $("board");
+const turnTagEl = $("turn-tag");
+const plyEl = $("ply");
+const legalCountEl = $("legal-count");
+const resultEl = $("result");
+const movesEl = $("moves");
+const depthSel = $("depth");
+
+function setStatus(text, cls) {
+  statusEl.textContent = text;
+  statusEl.className = cls || "loading";
+}
+
+// ============ 引擎初始化 ============
+async function initEngine() {
+  try {
+    setStatus("正在加载引擎…", "loading");
+    ffish = await Module({
+      locateFile: (file) => {
+        if (file.endsWith(".wasm")) return "ffish.wasm";
+        if (file.endsWith(".data")) return "ffish.data";
+        return file;
+      },
+    });
+    if (!ffish.variants().includes(VARIANT)) {
+      throw new Error("引擎不支持 " + VARIANT);
+    }
+    try {
+      ffish.setOption("EvalFile", "minixiangqi.nnue");
+    } catch (_) { /* 非内嵌 NNUE 构建可忽略 */ }
+    setStatus("引擎就绪", "ready");
+    newGame();
+  } catch (err) {
+    setStatus("加载失败: " + err.message, "error");
+    console.error(err);
+  }
+}
+
+// ============ 对局控制 ============
+function newGame() {
+  if (board) { try { board.delete(); } catch (_) {} }
+  board = new ffish.Board(VARIANT);
+  moveHistory = [];
+  selectedSq = null;
+  legalForSelected = [];
+  lastMove = null;
+  renderBoard();
+  setStatus("引擎就绪", "ready");
+}
+
+function undoMove() {
+  if (!board || moveHistory.length === 0) return;
+  board.pop();
+  moveHistory.pop();
+  selectedSq = null;
+  legalForSelected = [];
+  lastMove = moveHistory.length > 0 ? parseMove(moveHistory[moveHistory.length - 1]) : null;
+  renderBoard();
+}
+
+// ============ 渲染 ============
+function renderBoard() {
+  if (!board) return;
+  const data = JSON.parse(board.boardData());
+  const files = data.files;   // 7
+  const ranks = data.ranks;   // 7
+  const grid = data.board;    // [rank][file]，rank 0 是顶部
+  const checked = (data.checkedPieces || "").trim().split(/\s+/).filter(Boolean);
+
+  // board 内部数组 boardData 的 board 字段是 [ranks][files]，
+  // 其中 boardData 输出的 board[r][f]，r=0 对应最顶行（黑方底线）
+  // 为了与 PAWN_BONUS 等表一致（rank 0 = 红方底线），我们翻转后渲染。
+  // 同时坐标轴：屏幕底部 = 红方 (rank 6) = 顶层 ranks-1
+  let html = "";
+  // 顶部文件标签行
+  html += '<div class="board-label"></div>';
+  for (let f = 0; f < files; f++) {
+    html += '<div class="board-label">' + String.fromCharCode(97 + f) + "</div>";
+  }
+  html += '<div class="board-label"></div>';
+
+  // 棋盘行：自上而下显示（rank=ranks-1 在屏幕顶部）
+  for (let screenRow = 0; screenRow < ranks; screenRow++) {
+    const engineRow = screenRow; // 屏幕顶部行 = 引擎 board[0]
+    const rankLabel = ranks - screenRow; // 1..ranks
+    html += '<div class="board-label">' + rankLabel + "</div>";
+    for (let f = 0; f < files; f++) {
+      const piece = grid[engineRow][f];
+      const sq = String.fromCharCode(97 + f) + rankLabel;
+      const isEmpty = !piece || piece === "";
+      const isWhite = !isEmpty && piece === piece.toUpperCase() && piece !== "~";
+      const isBlack = !isEmpty && piece === piece.toLowerCase() && piece !== "~";
+      const isSelected = selectedSq === sq;
+      const isChecked = checked.includes(sq);
+      const isLast = lastMove && (lastMove.from === sq || lastMove.to === sq);
+
+      let classes = "cell";
+      if (isSelected) classes += " selected";
+      if (isChecked) classes += " check";
+      if (isLast) classes += " last-move";
+
+      html += '<div class="' + classes + '" data-sq="' + sq + '">';
+      if (!isEmpty) {
+        html += '<div class="piece' + (isBlack ? " black" : "") + '">';
+        html += PIECE_GLYPH[piece] || piece;
+        html += "</div>";
+      }
+      // 合法着法标记
+      if (selectedSq && legalForSelected.includes(sq) && sq !== selectedSq) {
+        if (isEmpty) html += '<div class="legal-dot"></div>';
+        else html += '<div class="legal-capture"></div>';
+      }
+      html += "</div>";
+    }
+    html += '<div class="board-label">' + rankLabel + "</div>";
+  }
+
+  // 底部文件标签行
+  html += '<div class="board-label"></div>';
+  for (let f = 0; f < files; f++) {
+    html += '<div class="board-label">' + String.fromCharCode(97 + f) + "</div>";
+  }
+  html += '<div class="board-label"></div>';
+
+  boardEl.innerHTML = html;
+
+  // 状态信息
+  const turn = data.turn;
+  turnTagEl.textContent = turn ? "红" : "黑";
+  turnTagEl.className = "turn-tag " + (turn ? "white" : "black");
+  plyEl.textContent = board.gamePly();
+  legalCountEl.textContent = board.numberLegalMoves();
+  const result = board.result();
+  if (result && result !== "*") {
+    resultEl.textContent = result;
+    setStatus("对局结束: " + result, "over");
+  } else {
+    resultEl.textContent = "进行中";
+  }
+
+  // 着法记录
+  renderMoves();
+}
+
+function renderMoves() {
+  let html = "";
+  for (let i = 0; i < moveHistory.length; i++) {
+    if (i % 2 === 0) {
+      html += '<span class="ply">' + (Math.floor(i / 2) + 1) + ".</span> ";
+    }
+    try {
+      const san = board.sanMove ? board.sanMove(moveHistory[i]) : moveHistory[i];
+      const cls = i % 2 === 0 ? "white" : "black";
+      html += '<span class="' + cls + '">' + san + "</span> ";
+    } catch (_) {
+      const cls = i % 2 === 0 ? "white" : "black";
+      html += '<span class="' + cls + '">' + moveHistory[i] + "</span> ";
+    }
+  }
+  movesEl.innerHTML = html;
+  movesEl.scrollTop = movesEl.scrollHeight;
+}
+
+// ============ 交互 ============
+boardEl.addEventListener("click", (e) => {
+  if (isAIThinking) return;
+  const cell = e.target.closest(".cell");
+  if (!cell) return;
+  const sq = cell.dataset.sq;
+  if (!sq) return;
+  handleSquareClick(sq);
+});
+
+function handleSquareClick(sq) {
+  if (!board) return;
+  if (board.isGameOver()) return;
+  const data = JSON.parse(board.boardData());
+  const grid = data.board;
+  const turn = data.turn;
+  const piece = pieceAt(grid, sq);
+
+  if (selectedSq) {
+    // 第二次点击：尝试走到 sq
+    if (legalForSelected.includes(sq)) {
+      doMove(selectedSq + sq);
+      return;
+    }
+    // 选中自己的另一枚棋子 → 切换
+    if (piece && isOwnPiece(piece, turn)) {
+      selectSquare(sq);
+      return;
+    }
+    // 否则取消选择
+    clearSelection();
+    return;
+  }
+
+  // 第一次点击：选中己方棋子
+  if (piece && isOwnPiece(piece, turn)) {
+    selectSquare(sq);
+  }
+}
+
+function selectSquare(sq) {
+  selectedSq = sq;
+  const moves = (board.legalMoves() || "").split(/\s+/).filter(Boolean);
+  legalForSelected = moves
+    .filter((m) => m.startsWith(sq) && m.length >= 4)
+    .map((m) => m.substring(2, 4));
+  renderBoard();
+}
+function clearSelection() {
+  selectedSq = null;
+  legalForSelected = [];
+  renderBoard();
+}
+
+function doMove(uci) {
+  if (!board.push(uci)) {
+    clearSelection();
+    return;
+  }
+  moveHistory.push(uci);
+  lastMove = parseMove(uci);
+  selectedSq = null;
+  legalForSelected = [];
+  renderBoard();
+}
+
+function parseMove(uci) {
+  return { from: uci.substring(0, 2), to: uci.substring(2, 4) };
+}
+
+function pieceAt(grid, sq) {
+  // boardData() 返回的 board[rankIndex][fileIndex] 中，
+  // rankIndex=0 对应棋盘最顶行（黑方底线 = rank 7），
+  // rankIndex=ranks-1 对应棋盘最底行（红方底线 = rank 1）。
+  // 因此屏幕坐标 sq（如 "a1"）对应的数组下标为 ranks - r。
+  const f = sq.charCodeAt(0) - 97;
+  const r = parseInt(sq[1], 10);
+  const engineRow = grid.length - r;
+  return grid[engineRow][f];
+}
+
+function isOwnPiece(piece, turn) {
+  if (!piece || piece === "~") return false;
+  const isUpper = piece === piece.toUpperCase();
+  return turn ? isUpper : !isUpper;
+}
+
+// ============ AI ============
+function aiMove() {
+  if (!board || isAIThinking) return;
+  if (board.isGameOver()) return;
+  isAIThinking = true;
+  setStatus("AI 思考中…", "thinking");
+  $("btn-ai").disabled = true;
+  $("btn-new").disabled = true;
+  $("btn-undo").disabled = true;
+
+  // 异步执行避免卡 UI
+  setTimeout(() => {
+    try {
+      const depth = parseInt(depthSel.value, 10) || 2;
+      const best = searchBestMove(board, depth);
+      if (best) {
+        board.push(best);
+        moveHistory.push(best);
+        lastMove = parseMove(best);
+        selectedSq = null;
+        legalForSelected = [];
+        renderBoard();
+        if (board.isGameOver()) {
+          setStatus("对局结束: " + board.result(), "over");
+        } else {
+          setStatus("引擎就绪", "ready");
+        }
+      } else {
+        setStatus("无可行走法", "ready");
+      }
+    } catch (e) {
+      setStatus("AI 错误: " + e.message, "error");
+      console.error(e);
+    } finally {
+      isAIThinking = false;
+      $("btn-ai").disabled = false;
+      $("btn-new").disabled = false;
+      $("btn-undo").disabled = false;
+    }
+  }, 30);
+}
+
+// 极小化极大 + alpha-beta，返回最佳 UCI 着法
+function searchBestMove(rootBoard, maxDepth) {
+  const moves = (rootBoard.legalMoves() || "").split(/\s+/).filter(Boolean);
+  if (moves.length === 0) return null;
+
+  const rootTurn = rootBoard.turn(); // true = 红方
+  let bestMove = moves[0];
+  let bestScore = rootTurn ? -Infinity : Infinity;
+  const order = orderMoves(rootBoard, moves);
+
+  for (const m of order) {
+    rootBoard.push(m);
+    const score = -alphaBeta(rootBoard, maxDepth - 1, -Infinity, Infinity, !rootTurn);
+    rootBoard.pop();
+    if (rootTurn ? score > bestScore : score < bestScore) {
+      bestScore = score;
+      bestMove = m;
+    }
+  }
+  return bestMove;
+}
+
+function alphaBeta(b, depth, alpha, beta, turnWhite) {
+  if (b.isGameOver()) {
+    const res = b.result();
+    if (res === "1-0") return 100000;
+    if (res === "0-1") return -100000;
+    return 0;
+  }
+  if (depth <= 0) return evaluate(b, turnWhite);
+
+  const moves = (b.legalMoves() || "").split(/\s+/).filter(Boolean);
+  if (moves.length === 0) return 0;
+
+  let best = -Infinity;
+  for (const m of moves) {
+    b.push(m);
+    const score = -alphaBeta(b, depth - 1, -beta, -alpha, !turnWhite);
+    b.pop();
+    if (score > best) best = score;
+    if (best > alpha) alpha = best;
+    if (alpha >= beta) break;
+  }
+  return best;
+}
+
+// 简单着法排序：优先吃子（按目标格子上的子力价值排序）
+function orderMoves(b, moves) {
+  const data = JSON.parse(b.boardData());
+  const grid = data.board;
+  return moves
+    .map((m) => {
+      const to = m.substring(2, 4);
+      const f = to.charCodeAt(0) - 97;
+      const r = parseInt(to[1], 10);
+      const target = grid[grid.length - r][f];
+      const v = target && target !== "~" ? (PIECE_VALUE[target.toUpperCase()] || 0) : 0;
+      return { m, v };
+    })
+    .sort((a, b) => b.v - a.v)
+    .map((x) => x.m);
+}
+
+function evaluate(b, forWhite) {
+  const data = JSON.parse(b.boardData());
+  const grid = data.board; // grid[r=0 top .. r=6 bottom][f]
+  let score = 0; // 正 = 红方有利
+  for (let r = 0; r < grid.length; r++) {
+    for (let f = 0; f < grid[r].length; f++) {
+      const p = grid[r][f];
+      if (!p || p === "~") continue;
+      const isWhite = p === p.toUpperCase();
+      const base = PIECE_VALUE[p.toUpperCase()] || 0;
+      let pos = 0;
+      if (p.toUpperCase() === "P") {
+        // 红方在 r=6（底），黑方在 r=0（顶）
+        const bonusRow = isWhite ? 6 - r : r;
+        const row = clamp(bonusRow, 0, 6);
+        pos = PAWN_BONUS[row][f] || 0;
+      } else if (p.toUpperCase() === "N") {
+        const row = isWhite ? 6 - r : r;
+        pos = KNIGHT_BONUS[row][f] || 0;
+      }
+      const total = base + pos;
+      score += isWhite ? total : -total;
+    }
+  }
+  return forWhite ? score : -score;
+}
+function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+
+// ============ 事件绑定 ============
+$("btn-new").addEventListener("click", newGame);
+$("btn-ai").addEventListener("click", aiMove);
+$("btn-undo").addEventListener("click", undoMove);
+
+// 启动
+initEngine();
+</script>
+</body>
+</html>
