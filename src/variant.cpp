@@ -1243,6 +1243,7 @@ namespace {
         //v->nFoldValue = VALUE_MATE;
         v->perpetualCheckIllegal = true;
         v->flyingGeneral = true;
+        v->nnueAlias = "minixiangqi";
         return v;
     }
 #ifdef LARGEBOARDS

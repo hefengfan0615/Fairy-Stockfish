@@ -1,0 +1,79 @@
+name: minixiangqi
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  minixiangqi:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: src
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y expect wget
+
+      - name: Install gdown for Google Drive downloads
+        run: |
+          sudo apt install -y python3-pip
+          pip3 install gdown --break-system-packages
+
+      - name: Download NNUE network if not present
+        run: |
+          NNUE_FILE="minixiangqi.nnue"
+          if [ -f "$NNUE_FILE" ]; then
+            echo "NNUE network already exists in repository"
+          else
+            echo "Downloading NNUE network from Google Drive..."
+            python3 -m gdown "https://drive.google.com/u/0/uc?id=1olNzEqMDtqLC7lnt7Rsst39ar1tzsv86" -O "$NNUE_FILE" || \
+            wget --no-check-certificate "https://docs.google.com/uc?export=download&id=1olNzEqMDtqLC7lnt7Rsst39ar1tzsv86" -O "$NNUE_FILE"
+          fi
+          ls -la "$NNUE_FILE"
+
+      - name: Commit NNUE file to repository if newly downloaded
+        run: |
+          NNUE_FILE="minixiangqi.nnue"
+          if git status --porcelain "$NNUE_FILE" | grep -q "??"; then
+            echo "NNUE file is new, committing to repository..."
+            git config user.name "github-actions"
+            git config user.email "github-actions@github.com"
+            git add -f "$NNUE_FILE"
+            git commit -m "Add minixiangqi NNUE network file"
+            git push origin master
+          else
+            echo "NNUE file already tracked, no commit needed"
+          fi
+
+      - name: Build engine with NNUE
+        run: |
+          make clean
+          make -j2 ARCH=x86-64 nnue=yes build
+
+      - name: Test minixiangqi go depth 20
+        run: |
+          expect << 'EOF'
+            set timeout 60
+            spawn ./stockfish
+            send "uci\n"
+            expect "uciok"
+            send "setoption name UCI_Variant value minixiangqi\n"
+            send "setoption name EvalFile value minixiangqi.nnue\n"
+            send "isready\n"
+            expect "readyok"
+            send "position startpos\n"
+            send "go depth 20\n"
+            expect "bestmove"
+            send "quit\n"
+            expect eof
+          EOF
