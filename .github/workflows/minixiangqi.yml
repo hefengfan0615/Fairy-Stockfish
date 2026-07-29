@@ -74,26 +74,20 @@ jobs:
           make -f Makefile_js build nnue=yes
           ls -la ../tests/js/
 
-      - name: Test WASM engine with Node.js (go depth 20)
+      - name: Test WASM engine with Node.js
         run: |
           cd ../tests/js
-          npm install --ignore-scripts 2>/dev/null || true
-          expect << 'EOF'
-            set timeout 120
-            spawn node -e "
-            const ffish = require('./ffish.js');
-            ffish['onRuntimeInitialized'] = () => {
-              console.log('FFish version:', ffish.info());
-              const board = new ffish.Board('minixiangqi');
-              console.log('FEN:', board.fen());
-              console.log('Legal moves:', board.legalMoves());
-              board.delete();
-              console.log('WASM engine test PASSED');
-            };
-            "
-            expect "PASSED"
-            expect eof
-          EOF
+          node -e "
+          const ffish = require('./ffish.js');
+          ffish['onRuntimeInitialized'] = () => {
+            console.log('FFish version:', ffish.info());
+            const board = new ffish.Board('minixiangqi');
+            console.log('FEN:', board.fen());
+            console.log('Legal moves:', board.legalMoves());
+            board.delete();
+            console.log('WASM engine test PASSED');
+          };
+          "
 
       - name: Build WASM ES6 module for web deployment
         run: |
