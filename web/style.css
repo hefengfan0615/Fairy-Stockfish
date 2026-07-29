@@ -5,61 +5,64 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
   background: #1a1a2e;
   color: #e0e0e0;
   min-height: 100vh;
+  display: flex;
+  justify-content: center;
 }
 
 .container {
-  max-width: 1200px;
+  max-width: 520px;
+  width: 100%;
   margin: 0 auto;
-  padding: 20px;
+  padding: 12px;
 }
 
 h1 {
   text-align: center;
   color: #e94560;
-  margin-bottom: 5px;
-  font-size: 1.8em;
+  margin-bottom: 4px;
+  font-size: 1.5em;
 }
 
 .subtitle {
-  font-size: 0.6em;
-  color: #888;
+  font-size: 0.55em;
+  color: #ffd700;
+  font-weight: normal;
 }
 
+/* Status bar */
 .status-bar {
   text-align: center;
-  margin-bottom: 15px;
+  margin-bottom: 8px;
+  font-size: 13px;
 }
 
 .status-loading { color: #ffd700; }
 .status-ready { color: #4caf50; }
 .status-error { color: #f44336; }
-.status-thinking { color: #ffd700; }
+.status-thinking { color: #ff9800; }
 
-.main-layout {
+/* Board */
+#board-container {
   display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
   justify-content: center;
-}
-
-.board-section {
-  flex: 0 0 auto;
+  margin-bottom: 6px;
 }
 
 .board-display {
   background: #c8a96e;
   border: 3px solid #8b6914;
-  border-radius: 4px;
-  padding: 10px;
+  border-radius: 6px;
+  padding: 8px;
   display: inline-block;
-  font-family: 'Courier New', monospace;
+  font-family: 'Courier New', 'Noto Sans SC', monospace;
   font-size: 14px;
-  line-height: 1.5;
-  min-width: 200px;
+  line-height: 1.4;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .board-display .row {
@@ -68,159 +71,202 @@ h1 {
 }
 
 .board-display .cell {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: bold;
   cursor: pointer;
   border-radius: 3px;
-  transition: background 0.2s;
+  transition: background 0.15s;
+  position: relative;
 }
 
 .board-display .cell:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.25);
 }
 
 .board-display .cell.empty {
   color: transparent;
+  cursor: default;
 }
 
 .board-display .cell.white-piece {
-  color: #fff;
-  text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+  color: #e53935;
+  text-shadow: 1px 1px 1px rgba(0,0,0,0.3);
 }
 
 .board-display .cell.black-piece {
-  color: #222;
-  text-shadow: 1px 1px 2px rgba(255,255,255,0.3);
+  color: #1a1a1a;
+  text-shadow: 1px 1px 1px rgba(255,255,255,0.3);
 }
 
 .board-display .cell.check {
-  background: rgba(255, 0, 0, 0.4);
+  background: rgba(255, 0, 0, 0.45);
   border-radius: 50%;
 }
 
+.board-display .cell.selected {
+  background: rgba(255, 215, 0, 0.5);
+  box-shadow: inset 0 0 0 2px #ffd700;
+}
+
+.board-display .cell.valid-move {
+  position: relative;
+}
+
+.board-display .cell.valid-move::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: rgba(0, 200, 0, 0.6);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.board-display .cell.valid-move.capture-move {
+  box-shadow: inset 0 0 0 2px rgba(255, 0, 0, 0.6);
+}
+
+.board-display .cell.last-move {
+  background: rgba(255, 255, 0, 0.3);
+}
+
 .board-display .rank-label {
-  width: 24px;
+  width: 22px;
   text-align: center;
   color: #5a3e1b;
   font-weight: bold;
-  font-size: 12px;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
 }
 
+/* Board info */
 .board-info {
-  margin-top: 10px;
-  font-size: 13px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #aaa;
+  padding: 4px 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
-.info-item {
-  margin: 3px 0;
-  word-break: break-all;
-}
-
-.controls-section {
-  flex: 1;
-  min-width: 300px;
-  max-width: 400px;
-}
-
-.control-group {
+/* Engine Analysis */
+.engine-analysis {
+  background: #0f1829;
+  border: 1px solid #2a3a5c;
+  border-radius: 6px;
+  padding: 10px 12px;
   margin-bottom: 10px;
 }
 
-.control-group label {
-  display: block;
-  margin-bottom: 3px;
+.analysis-header {
+  font-size: 12px;
+  color: #8ab4f8;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.analysis-stats {
   font-size: 13px;
-  color: #aaa;
-}
-
-select, input[type="text"] {
-  width: 100%;
-  padding: 8px;
-  border: 1px solid #444;
-  border-radius: 4px;
-  background: #16213e;
   color: #e0e0e0;
+  font-family: 'Courier New', 'Noto Sans SC', monospace;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.analysis-stats .depth-val { color: #4fc3f7; }
+.analysis-stats .score-val { color: #66bb6a; }
+.analysis-stats .mate-val { color: #ff5252; font-weight: bold; }
+.analysis-stats .nodes-val { color: #bdbdbd; }
+
+.analysis-pv {
   font-size: 14px;
+  color: #ffcc80;
+  font-family: 'Noto Sans SC', 'Courier New', 'Microsoft YaHei', monospace;
+  line-height: 1.6;
+  word-break: break-all;
+  min-height: 20px;
 }
 
-select:focus, input[type="text"]:focus {
-  outline: none;
-  border-color: #e94560;
-}
-
-.button-group {
+/* Bottom Controls */
+.bottom-controls {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 15px 0;
+  gap: 10px;
+  justify-content: center;
+  padding: 6px 0;
 }
 
 .btn {
-  padding: 8px 16px;
+  padding: 10px 20px;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.2s;
+  font-size: 15px;
+  font-weight: 600;
+  transition: all 0.15s;
+  font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+  min-width: 80px;
 }
 
 .btn:hover { opacity: 0.85; transform: translateY(-1px); }
 .btn:active { transform: translateY(0); }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 
-.btn-primary { background: #e94560; color: white; }
-.btn-secondary { background: #0f3460; color: white; }
-.btn-accent { background: #4caf50; color: white; }
-.btn-danger { background: #f44336; color: white; }
-
-.move-history, .engine-output {
-  margin-top: 15px;
+.btn-undo {
+  background: #e65100;
+  color: white;
 }
 
-.move-history h3, .engine-output h3 {
-  font-size: 14px;
-  color: #aaa;
-  margin-bottom: 5px;
+.btn-flip {
+  background: #1565c0;
+  color: white;
 }
 
-.move-list {
-  max-height: 150px;
-  overflow-y: auto;
-  background: #16213e;
-  border-radius: 4px;
+.btn-new-game {
+  background: #2e7d32;
+  color: white;
+}
+
+/* Result overlay */
+.result-overlay {
+  text-align: center;
   padding: 8px;
-  font-size: 13px;
-  font-family: 'Courier New', monospace;
+  margin-bottom: 8px;
+  background: #1b2838;
+  border: 1px solid #ffd700;
+  border-radius: 6px;
+  color: #ffd700;
+  font-size: 16px;
+  font-weight: bold;
 }
 
-.move-list .move-item {
-  padding: 2px 4px;
-  cursor: pointer;
-  border-radius: 2px;
+/* Responsive */
+@media (max-width: 480px) {
+  .container { padding: 8px; }
+  .board-display { font-size: 12px; padding: 5px; }
+  .board-display .cell { width: 28px; height: 28px; }
+  .board-display .rank-label { width: 18px; height: 28px; font-size: 10px; }
+  .board-display .cell.valid-move::after { width: 10px; height: 10px; }
+  .btn { padding: 10px 16px; font-size: 14px; min-width: 70px; }
+  .analysis-pv { font-size: 13px; }
+  .analysis-stats { font-size: 12px; }
+  h1 { font-size: 1.3em; }
 }
 
-.move-list .move-item:hover {
-  background: #0f3460;
-}
-
-.engine-output-text {
-  background: #0a0a1a;
-  border: 1px solid #333;
-  border-radius: 4px;
-  padding: 8px;
-  font-size: 12px;
-  max-height: 120px;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-@media (max-width: 768px) {
-  .main-layout { flex-direction: column; align-items: center; }
-  .controls-section { max-width: 100%; }
+@media (max-width: 360px) {
+  .board-display .cell { width: 24px; height: 24px; }
+  .board-display .rank-label { width: 16px; height: 24px; font-size: 9px; }
+  .board-display { font-size: 11px; padding: 3px; }
+  .board-display .cell.valid-move::after { width: 8px; height: 8px; }
+  .btn { padding: 8px 12px; font-size: 13px; min-width: 60px; }
 }
