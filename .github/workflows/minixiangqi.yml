@@ -108,19 +108,21 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          # Add WASM build artifacts in tests/js/
-          cd ../tests/js
-          for f in ffish.js ffish.wasm ffish.data; do
-            if [ -f "$f" ]; then
+          # Add WASM build artifacts from the repo root
+          REPO_ROOT=$(git rev-parse --show-toplevel)
+          STAGED=0
+          for f in tests/js/ffish.js tests/js/ffish.wasm tests/js/ffish.data; do
+            if [ -f "$REPO_ROOT/$f" ]; then
               git add -f "$f"
+              echo "Staged: $f"
+              STAGED=1
             fi
           done
-          cd ../../src
-          # Check if there are changes to commit
-          if git status --porcelain | grep -q .; then
+          # Check if there are staged changes to commit
+          if [ "$STAGED" = "1" ] && ! git diff --cached --quiet; then
             echo "WASM build artifacts have changes, committing..."
             git commit -m "Update WASM single-threaded engine build with NNUE support"
             git push origin master
           else
-            echo "No changes to commit"
+            echo "No new WASM artifacts to commit"
           fi
