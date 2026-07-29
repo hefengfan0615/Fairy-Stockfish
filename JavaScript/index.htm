@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>迷你象棋 (Mini Xiangqi) - 双人对战版</title>
+<style type="text/css">
+  body {
+    margin: 0;
+    padding: 20px;
+    background: linear-gradient(135deg, #d4a574 0%, #b8895a 100%);
+    font-family: "Microsoft YaHei", "黑体", sans-serif;
+    user-select: none;
+  }
+  .wrap {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .title {
+    text-align: center;
+    font-size: 26px;
+    color: #5a2d0c;
+    font-weight: bold;
+    margin-bottom: 14px;
+    letter-spacing: 4px;
+  }
+  .board-wrap {
+    background: #f5d499;
+    border: 4px solid #5a2d0c;
+    border-radius: 6px;
+    padding: 12px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  }
+  .board {
+    position: relative;
+    display: block;
+  }
+  .board svg {
+    display: block;
+  }
+  .piece {
+    position: absolute;
+    width: 48px;
+    height: 48px;
+    margin: -24px 0 0 -24px;
+    cursor: pointer;
+    transition: top 0.18s ease, left 0.18s ease;
+    z-index: 2;
+  }
+  .piece.selected {
+    filter: drop-shadow(0 0 6px #ffea00);
+  }
+  .piece.lastmove {
+    filter: drop-shadow(0 0 4px #ff8a00);
+  }
+  .indicator {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    margin: -6px 0 0 -6px;
+    border-radius: 50%;
+    background: rgba(0, 200, 0, 0.45);
+    border: 1px solid #006600;
+    pointer-events: none;
+    z-index: 3;
+  }
+  .panel {
+    background: #fff8e7;
+    border: 2px solid #5a2d0c;
+    border-radius: 6px;
+    padding: 12px;
+    width: 240px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  }
+  .panel h3 {
+    margin: 0 0 8px 0;
+    color: #5a2d0c;
+    font-size: 15px;
+    border-bottom: 1px solid #c0a075;
+    padding-bottom: 4px;
+  }
+  .panel .row {
+    margin-bottom: 10px;
+  }
+  .panel select, .panel input[type=button] {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 5px 8px;
+    font-size: 14px;
+    border: 1px solid #c0a075;
+    border-radius: 3px;
+    background: #fff;
+  }
+  .panel input[type=button] {
+    cursor: pointer;
+    background: #f5d499;
+    color: #5a2d0c;
+    font-weight: bold;
+  }
+  .panel input[type=button]:hover { background: #e6c184; }
+  .panel input[type=button]:disabled { background: #ddd; color: #888; cursor: not-allowed; }
+  .status {
+    padding: 8px;
+    border-radius: 3px;
+    background: #5a2d0c;
+    color: #fff8e7;
+    text-align: center;
+    font-weight: bold;
+    margin-bottom: 10px;
+    font-size: 14px;
+  }
+  .status.check { background: #c0392b; }
+  .movelist {
+    width: 100%;
+    height: 240px;
+    font-size: 13px;
+    border: 1px solid #c0a075;
+    border-radius: 3px;
+    padding: 4px;
+    background: #fff;
+    box-sizing: border-box;
+  }
+  .fen-box {
+    font-family: "Consolas", monospace;
+    font-size: 11px;
+    background: #2c1810;
+    color: #f5d499;
+    padding: 6px;
+    border-radius: 3px;
+    word-break: break-all;
+    margin-top: 4px;
+  }
+  .flip-box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+<div class="title">迷你象棋 · 双人对战</div>
+<div class="wrap">
+  <div class="board-wrap">
+    <div class="board" id="board"></div>
+  </div>
+  <div class="panel">
+    <div class="status" id="status">红方走棋</div>
+    <div class="row">
+      <h3>操作</h3>
+      <div style="display:flex;gap:6px">
+        <input type="button" value="新对局" onclick="restart()">
+        <input type="button" value="悔棋" onclick="undo()" id="btnUndo">
+      </div>
+      <div style="height:6px"></div>
+      <input type="button" value="切换视角" onclick="toggleFlip()">
+    </div>
+    <div class="row">
+      <h3>起始 FEN</h3>
+      <select id="fenSel" onchange="loadFen(this.value)">
+        <option value="rcnkncr/p1ppp1p/7/7/7/P1PPP1P/RCNKNCR w - - 0 1">迷你象棋标准开局</option>
+        <option value="rcnkncr/p1ppp1p/7/7/7/P1PPP1P/RCNK1NCR w - - 0 1">去掉一仕</option>
+        <option value="3kn3/9/7/7/7/7/4K3 w - - 0 1">将帅对决</option>
+      </select>
+    </div>
+    <div class="row">
+      <h3>当前 FEN</h3>
+      <div class="fen-box" id="fenOut"></div>
+    </div>
+    <div class="row">
+      <h3>走棋记录</h3>
+      <select id="moveList" class="movelist" size="10" onchange="jumpToMove()">
+        <option value="-1">=== 开始 ===</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<script type="text/javascript">
+"use strict";
+
+/* ============================================================
+ * 迷你象棋 (Mini Xiangqi) - 7x7 棋盘
+ * 规则参考 Fairy-Stockfish minixiangqi_variant():
+ *   - 棋盘 7 文件 x 7 ranks
+ *   - 棋子: K(将/帅) R(车) N(马) C(炮) P(兵/卒)
+ *   - 帅(将)走一步, 限己方 3x3 九宫
+ *   - 马走日字, 蹩马腿
+ *   - 炮走直线, 隔一子吃
+ *   - 兵可前、左、右走 (无过河限制, 不可后退)
+ *   - 帅将不可照面 (flying general)
+ *   - 无长将
+ * ============================================================ */
+
+const FILES = 7;          // 7 files (a..g)
+const RANKS = 7;          // 7 ranks (0..6)
+const BOARD_PIXEL = 64;   // 每格像素
+const BOARD_PAD   = 28;   // 棋盘内边距 (用于边缘标注)
+const PIECE_SIZE  = 50;
+
+// FEN 字符 -> 内部 piece code
+// 内部编码: 0=空, 8=红帅, 9=红车, 10=红马, 11=红炮, 12=红兵
+//         16=黑将, 17=黑车, 18=黑马, 19=黑炮, 20=黑卒
+const PIECE_KING  = 1;
+const PIECE_ROOK  = 2;
+const PIECE_KNIGHT= 3;
+const PIECE_CANNON= 4;
+const PIECE_PAWN  = 5;
+const RED_TAG     = 8;
+const BLACK_TAG   = 16;
+const FEN_PIECE   = " KRNCP k rncp";
+
+const KING_DELTA  = [[-1,0],[1,0],[0,-1],[0,1]];
+const KNIGHT_DELTA = [
+  [-2,-1, 0,-1], // 上2左1: 蹩 (0,-1)
+  [-2, 1, 0, 1], // 上2右1
+  [ 2,-1, 0, 1], // 下2左1: 蹩 (0,1)
+  [ 2, 1, 0,-1], // 下2右1
+  [-1,-2,-1, 0], // 左2上1: 蹩 (-1,0)
+  [ 1,-2, 1, 0], // 右2上1
+  [-1, 2,-1, 0], // 左2下1
+  [ 1, 2, 1, 0]  // 右2下1
+];
+const CANNON_DELTA = [[-1,0],[1,0],[0,-1],[0,1]];
+
+const START_FEN = "rcnkncr/p1ppp1p/7/7/7/P1PPP1P/RCNKNCR w - - 0 1";
+
+// Piece image filename
+const IMG_NAME = {
+  8:  "rk", 9:  "rr", 10: "rn", 11: "rc", 12: "rp",
+  16: "bk", 17: "br", 18: "bn", 19: "bc", 20: "bp"
+};
+
+/* ---- 棋盘状态 ---- */
+let board = new Array(FILES * RANKS).fill(0); // 0..48, 一维数组
+let sideToMove = 0; // 0=红, 1=黑
+let moveStack = []; // 走棋历史 [{from, to, captured, prevSide, fen}]
+let selected = -1;  // 当前选中棋子 sq
+let legalFromSelected = []; // 选中后可走目标
+let flipped = false;
+let gameOver = false;
+let lastMove = null; // {from, to}
+let repStack = [0];  // 局面哈希栈(用于长将判定)
+
+/* ---- 坐标工具 ---- */
+function sqIdx(f, r) { return r * FILES + f; }
+function sqFile(sq) { return sq % FILES; }
+function sqRank(sq) { return Math.floor(sq / FILES); }
+function inBoard(f, r) { return f >= 0 && f < FILES && r >= 0 && r < RANKS; }
+
+function pieceSide(pc) { return pc < 16 ? 0 : 1; }
+function pieceType(pc) {
+  if (pc === 0) return 0;
+  return ((pc - 8) % 8);
+}
+function sideChar(s) { return s === 0 ? "r" : "b"; }
+function isSelf(pc) { return pc > 0 && pieceSide(pc) === sideToMove; }
+
+/* ---- 九宫区域 ----
+ * 红方九宫: 底部 3 行, 中间 3 列 -> 棋盘坐标: rank 0..2, file 2..4
+ * 黑方九宫: 顶部 3 行, 中间 3 列 -> 棋盘坐标: rank 4..6, file 2..4
+ * 注: 红方在下方, 起始位置 rank=0,1,2 (例如 RCNKNCR 在 rank=0)
+ */
+function inPalace(f, r) {
+  if (f < 2 || f > 4) return false;
+  if (sideToMove === 0) return r >= 0 && r <= 2;
+  return r >= 4 && r <= 6;
+}
+
+/* ---- 绘制棋盘 (SVG) ---- */
+function drawBoardSVG() {
+  const w = (FILES - 1) * BOARD_PIXEL + 2 * BOARD_PAD;
+  const h = (RANKS - 1) * BOARD_PIXEL + 2 * BOARD_PAD;
+  let svg = `<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">`;
+  // 木色背景
+  svg += `<rect x="0" y="0" width="${w}" height="${h}" fill="#f1cf94" stroke="#5a2d0c" stroke-width="3"/>`;
+  // 网格
+  for (let i = 0; i < FILES; i++) {
+    const x = BOARD_PAD + i * BOARD_PIXEL;
+    if (i === 0 || i === FILES - 1) {
+      svg += `<line x1="${x}" y1="${BOARD_PAD}" x2="${x}" y2="${BOARD_PAD + (RANKS-1)*BOARD_PIXEL}" stroke="#3a1d05" stroke-width="1.2"/>`;
+    } else {
+      svg += `<line x1="${x}" y1="${BOARD_PAD}" x2="${x}" y2="${BOARD_PAD + 2*BOARD_PIXEL}" stroke="#3a1d05" stroke-width="1"/>`;
+      svg += `<line x1="${x}" y1="${BOARD_PAD + 4*BOARD_PIXEL}" x2="${x}" y2="${BOARD_PAD + 6*BOARD_PIXEL}" stroke="#3a1d05" stroke-width="1"/>`;
+    }
+  }
+  for (let j = 0; j < RANKS; j++) {
+    const y = BOARD_PAD + j * BOARD_PIXEL;
+    svg += `<line x1="${BOARD_PAD}" y1="${y}" x2="${BOARD_PAD + (FILES-1)*BOARD_PIXEL}" y2="${y}" stroke="#3a1d05" stroke-width="1"/>`;
+  }
+  // 楚河汉界 (中间一格空行)
+  const riverY1 = BOARD_PAD + 2 * BOARD_PIXEL;
+  const riverY2 = BOARD_PAD + 4 * BOARD_PIXEL;
+  svg += `<rect x="${BOARD_PAD}" y="${riverY1}" width="${(FILES-1)*BOARD_PIXEL}" height="${riverY2-riverY1}" fill="#e8c280"/>`;
+  svg += `<line x1="${BOARD_PAD}" y1="${riverY1}" x2="${BOARD_PAD + (FILES-1)*BOARD_PIXEL}" y2="${riverY1}" stroke="#3a1d05" stroke-width="1.2"/>`;
+  svg += `<line x1="${BOARD_PAD}" y1="${riverY2}" x2="${BOARD_PAD + (FILES-1)*BOARD_PIXEL}" y2="${riverY2}" stroke="#3a1d05" stroke-width="1.2"/>`;
+  svg += `<text x="${BOARD_PAD + (FILES-1)*BOARD_PIXEL/2}" y="${(riverY1+riverY2)/2 + 6}" text-anchor="middle" font-size="16" fill="#5a2d0c" font-family="Microsoft YaHei">楚 河 · 汉 界</text>`;
+
+  // 九宫 (双方各 3x3)
+  // 红方: file 2..4, rank 0..2 -> 内部 2x2 对角线
+  // 用对角线绘制九宫 (files 2,3,4  rank 0,1,2)
+  function palaceX(f1, f2, r1, r2) {
+    const x1 = BOARD_PAD + f1 * BOARD_PIXEL, x2 = BOARD_PAD + f2 * BOARD_PIXEL;
+    const y1 = BOARD_PAD + r1 * BOARD_PIXEL, y2 = BOARD_PAD + r2 * BOARD_PIXEL;
+    svg += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#3a1d05" stroke-width="0.8" stroke-dasharray="3,2"/>`;
+  }
+  // 红方九宫 (rank 0..2, file 2..4)
+  palaceX(2, 4, 0, 2);
+  palaceX(4, 2, 0, 2);
+  // 黑方九宫 (rank 4..6, file 2..4)
+  palaceX(2, 4, 4, 6);
+  palaceX(4, 2, 4, 6);
+
+  // 坐标标注 (a-g 与 1-7)
+  const files = "abcdefg";
+  for (let i = 0; i < FILES; i++) {
+    svg += `<text x="${BOARD_PAD + i*BOARD_PIXEL}" y="${BOARD_PAD - 10}" text-anchor="middle" font-size="12" fill="#5a2d0c">${files[i]}</text>`;
+    svg += `<text x="${BOARD_PAD + i*BOARD_PIXEL}" y="${BOARD_PAD + (RANKS-1)*BOARD_PIXEL + 18}" text-anchor="middle" font-size="12" fill="#5a2d0c">${files[i]}</text>`;
+  }
+  for (let j = 0; j < RANKS; j++) {
+    svg += `<text x="${BOARD_PAD - 14}" y="${BOARD_PAD + j*BOARD_PIXEL + 4}" text-anchor="middle" font-size="12" fill="#5a2d0c">${RANKS - j}</text>`;
+    svg += `<text x="${BOARD_PAD + (FILES-1)*BOARD_PIXEL + 14}" y="${BOARD_PAD + j*BOARD_PIXEL + 4}" text-anchor="middle" font-size="12" fill="#5a2d0c">${RANKS - j}</text>`;
+  }
+  svg += `</svg>`;
+  return { svg, w, h };
+}
+
+function boardCoord(sq) {
+  // 返回在容器中的像素坐标
+  const f = sqFile(sq);
+  const r = sqRank(sq);
+  return {
+    x: BOARD_PAD + f * BOARD_PIXEL,
+    y: BOARD_PAD + r * BOARD_PIXEL
+  };
+}
+
+/* ---- FEN 解析/生成 ---- */
+function fromFen(fen) {
+  board.fill(0);
+  const parts = fen.trim().split(/\s+/);
+  const placement = parts[0];
+  const rows = placement.split('/');
+  // FEN 从 rank 6 (黑方底线) -> rank 0 (红方底线)
+  for (let rIdx = 0; rIdx < RANKS; rIdx++) {
+    const row = rows[rIdx];
+    if (!row) continue;
+    // 黑方在顶部 (FEN 中 rIdx=0), 对应 rank = RANKS-1
+    const r = RANKS - 1 - rIdx;
+    let f = 0;
+    for (let k = 0; k < row.length; k++) {
+      const c = row[k];
+      if (c >= '1' && c <= '9') {
+        f += parseInt(c, 10);
+      } else {
+        const isUpper = c === c.toUpperCase();
+        const lower = c.toLowerCase();
+        let t = 0;
+        if (lower === 'k') t = PIECE_KING;
+        else if (lower === 'r') t = PIECE_ROOK;
+        else if (lower === 'n' || lower === 'h') t = PIECE_KNIGHT;
+        else if (lower === 'c') t = PIECE_CANNON;
+        else if (lower === 'p') t = PIECE_PAWN;
+        if (t > 0) {
+          const base = isUpper ? RED_TAG : BLACK_TAG;
+          board[sqIdx(f, r)] = base + t;
+        }
+        f++;
+      }
+    }
+  }
+  sideToMove = (parts[1] === 'b') ? 1 : 0;
+}
+
+function toFen() {
+  let rows = [];
+  for (let rIdx = 0; rIdx < RANKS; rIdx++) {
+    const r = RANKS - 1 - rIdx;
+    let row = '';
+    let empty = 0;
+    for (let f = 0; f < FILES; f++) {
+      const pc = board[sqIdx(f, r)];
+      if (pc === 0) { empty++; continue; }
+      if (empty > 0) { row += empty; empty = 0; }
+      const t = pieceType(pc);
+      const isRed = pc < 16;
+      let ch = '';
+      if (t === PIECE_KING)   ch = 'k';
+      else if (t === PIECE_ROOK)   ch = 'r';
+      else if (t === PIECE_KNIGHT) ch = 'n';
+      else if (t === PIECE_CANNON) ch = 'c';
+      else if (t === PIECE_PAWN)   ch = 'p';
+      row += isRed ? ch.toUpperCase() : ch;
+    }
+    if (empty > 0) row += empty;
+    rows.push(row);
+  }
+  return rows.join('/') + ' ' + (sideToMove === 0 ? 'w' : 'b') + ' - - 0 1';
+}
+
+/* ---- 走法生成 (合法走法, 排除自送将军) ---- */
+function findKing(side) {
+  const target = (side === 0 ? RED_TAG : BLACK_TAG) + PIECE_KING;
+  for (let sq = 0; sq < board.length; sq++) {
+    if (board[sq] === target) return sq;
+  }
+  return -1;
+}
+
+function pseudoMoves(sq, into) {
+  // 伪合法走法 (不考虑将军), append into array
+  const pc = board[sq];
+  if (pc === 0) return into;
+  const type = pieceType(pc);
+  const f0 = sqFile(sq), r0 = sqRank(sq);
+  const ownSide = pieceSide(pc);
+
+  if (type === PIECE_KING) {
+    for (const [df, dr] of KING_DELTA) {
+      const f = f0 + df, r = r0 + dr;
+      if (!inBoard(f, r)) continue;
+      if (!inPalace(f, r)) continue;
+      const dst = sqIdx(f, r);
+      if (board[dst] === 0 || pieceSide(board[dst]) !== ownSide) {
+        into.push({ from: sq, to: dst });
+      }
+    }
+  } else if (type === PIECE_ROOK) {
+    for (const [df, dr] of KING_DELTA) {
+      let f = f0 + df, r = r0 + dr;
+      while (inBoard(f, r)) {
+        const dst = sqIdx(f, r);
+        const dstPc = board[dst];
+        if (dstPc === 0) {
+          into.push({ from: sq, to: dst });
+        } else {
+          if (pieceSide(dstPc) !== ownSide) {
+            into.push({ from: sq, to: dst });
+          }
+          break;
+        }
+        f += df; r += dr;
+      }
+    }
+  } else if (type === PIECE_KNIGHT) {
+    for (const [df, dr, lf, lr] of KNIGHT_DELTA) {
+      const legF = f0 + lf, legR = r0 + lr;
+      if (!inBoard(legF, legR)) continue;
+      if (board[sqIdx(legF, legR)] !== 0) continue; // 蹩马腿
+      const f = f0 + df, r = r0 + dr;
+      if (!inBoard(f, r)) continue;
+      const dst = sqIdx(f, r);
+      if (board[dst] === 0 || pieceSide(board[dst]) !== ownSide) {
+        into.push({ from: sq, to: dst });
+      }
+    }
+  } else if (type === PIECE_CANNON) {
+    for (const [df, dr] of CANNON_DELTA) {
+      let f = f0 + df, r = r0 + dr;
+      // 沿方向走到第一个棋子
+      while (inBoard(f, r) && board[sqIdx(f, r)] === 0) {
+        into.push({ from: sq, to: sqIdx(f, r) });
+        f += df; r += dr;
+      }
+      if (!inBoard(f, r)) continue;
+      // 跳过炮架
+      f += df; r += dr;
+      while (inBoard(f, r)) {
+        const dst = sqIdx(f, r);
+        const dstPc = board[dst];
+        if (dstPc === 0) { f += df; r += dr; continue; }
+        if (pieceSide(dstPc) !== ownSide) {
+          into.push({ from: sq, to: dst });
+        }
+        break;
+      }
+    }
+  } else if (type === PIECE_PAWN) {
+    // 兵: 可前、左、右 (无过河限制, 不可后退)
+    // 红方在 rank 0 一侧, 黑方在 rank 6 一侧, 红方向前 = +1
+    const forward = (ownSide === 0) ? 1 : -1;
+    const fr = r0 + forward;
+    if (inBoard(f0, fr)) {
+      const dst = sqIdx(f0, fr);
+      if (board[dst] === 0 || pieceSide(board[dst]) !== ownSide) {
+        into.push({ from: sq, to: dst });
+      }
+    }
+    for (const df of [-1, 1]) {
+      const ff = f0 + df;
+      if (!inBoard(ff, r0)) continue;
+      const dst = sqIdx(ff, r0);
+      if (board[dst] === 0 || pieceSide(board[dst]) !== ownSide) {
+        into.push({ from: sq, to: dst });
+      }
+    }
+  }
+  return into;
+}
+
+function generateAllMoves(side) {
+  const moves = [];
+  for (let sq = 0; sq < board.length; sq++) {
+    if (board[sq] === 0 || pieceSide(board[sq]) !== side) continue;
+    pseudoMoves(sq, moves);
+  }
+  return moves;
+}
+
+function makeMoveRaw(mv) {
+  const cap = board[mv.to];
+  board[mv.to] = board[mv.from];
+  board[mv.from] = 0;
+  return cap;
+}
+
+function unmakeMoveRaw(mv, cap) {
+  board[mv.from] = board[mv.to];
+  board[mv.to] = cap;
+}
+
+function inCheck(side) {
+  const kSq = findKing(side);
+  if (kSq < 0) return true; // 找不到王, 视为被将
+  // 普通攻击: 对方任何棋子攻击王所在格
+  if (isSquareAttacked(kSq, 1 - side)) return true;
+  // 飞将 (帅将对面): 两王同列且中间无子
+  return kingsFaceEachOther();
+}
+
+function kingsFaceEachOther() {
+  let redKing = -1, blackKing = -1;
+  for (let sq = 0; sq < board.length; sq++) {
+    const pc = board[sq];
+    if (pc === RED_TAG + PIECE_KING) redKing = sq;
+    else if (pc === BLACK_TAG + PIECE_KING) blackKing = sq;
+  }
+  if (redKing < 0 || blackKing < 0) return false;
+  if (sqFile(redKing) !== sqFile(blackKing)) return false;
+  const f = sqFile(redKing);
+  const r1 = sqRank(redKing), r2 = sqRank(blackKing);
+  const step = (r1 < r2) ? 1 : -1;
+  for (let r = r1 + step; r !== r2; r += step) {
+    if (board[sqIdx(f, r)] !== 0) return false;
+  }
+  return true;
+}
+
+function isSquareAttacked(sq, bySide) {
+  const f0 = sqFile(sq), r0 = sqRank(sq);
+  // 1) 车 (沿直线)
+  for (const [df, dr] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+    let f = f0 + df, r = r0 + dr;
+    while (inBoard(f, r)) {
+      const pc = board[sqIdx(f, r)];
+      if (pc !== 0) {
+        if (pieceSide(pc) === bySide && pieceType(pc) === PIECE_ROOK) return true;
+        break;
+      }
+      f += df; r += dr;
+    }
+  }
+  // 2) 马 (从 8 个日字方向, 反向检查)
+  for (const [df, dr, lf, lr] of KNIGHT_DELTA) {
+    const legF = f0 - lf, legR = r0 - lr;
+    if (!inBoard(legF, legR)) continue;
+    if (board[sqIdx(legF, legR)] !== 0) continue; // 蹩马腿
+    const f = f0 - df, r = r0 - dr;
+    if (!inBoard(f, r)) continue;
+    const pc = board[sqIdx(f, r)];
+    if (pc !== 0 && pieceSide(pc) === bySide && pieceType(pc) === PIECE_KNIGHT) {
+      return true;
+    }
+  }
+  // 3) 炮 (隔一子)
+  for (const [df, dr] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+    let f = f0 + df, r = r0 + dr;
+    let screens = 0;
+    while (inBoard(f, r)) {
+      const pc = board[sqIdx(f, r)];
+      if (pc !== 0) {
+        if (screens === 0) { screens = 1; }
+        else {
+          if (pieceSide(pc) === bySide && pieceType(pc) === PIECE_CANNON) return true;
+          break;
+        }
+      }
+      f += df; r += dr;
+    }
+  }
+  // 4) 兵: 攻击前方与左右 (无论过河与否, 均可横移)
+  //    红方在 rank 0 一侧, 攻击方向 = +1; 黑方攻击方向 = -1
+  const pawnForward = (bySide === 0) ? 1 : -1;
+  for (const [df, dr] of [[0, pawnForward], [-1, 0], [1, 0]]) {
+    const f = f0 + df, r = r0 + dr;
+    if (!inBoard(f, r)) continue;
+    const pc = board[sqIdx(f, r)];
+    if (pc !== 0 && pieceSide(pc) === bySide && pieceType(pc) === PIECE_PAWN) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function legalMovesFrom(sq) {
+  const out = [];
+  pseudoMoves(sq, out);
+  const result = [];
+  for (const mv of out) {
+    const cap = makeMoveRaw(mv);
+    if (!inCheck(sideToMove)) {
+      result.push(mv);
+    }
+    unmakeMoveRaw(mv, cap);
+  }
+  return result;
+}
+
+function hasAnyLegalMove(side) {
+  for (let sq = 0; sq < board.length; sq++) {
+    if (board[sq] === 0 || pieceSide(board[sq]) !== side) continue;
+    if (legalMovesFrom(sq).length > 0) return true;
+  }
+  return false;
+}
+
+/* ---- 局面哈希 (用于长将检测) ---- */
+function posHash() {
+  let h = 0;
+  for (let i = 0; i < board.length; i++) h = (h * 31 + board[i]) | 0;
+  h = (h * 31 + sideToMove) | 0;
+  return h;
+}
+
+function countRepetitions(hash) {
+  let c = 0;
+  for (let i = 0; i < repStack.length; i++) {
+    if (repStack[i] === hash) c++;
+  }
+  return c;
+}
+
+/* ---- 用户走棋处理 ---- */
+function onSquareClick(sq) {
+  if (gameOver) return;
+  const pc = board[sq];
+  if (selected === -1) {
+    // 第一次点击: 必须是己方棋子
+    if (pc !== 0 && pieceSide(pc) === sideToMove) {
+      selected = sq;
+      legalFromSelected = legalMovesFrom(sq);
+      render();
+    }
+    return;
+  }
+  // 已选中一个
+  if (sq === selected) {
+    // 取消选中
+    selected = -1;
+    legalFromSelected = [];
+    render();
+    return;
+  }
+  // 点击自己方另一棋子: 切换选择
+  if (pc !== 0 && pieceSide(pc) === sideToMove) {
+    selected = sq;
+    legalFromSelected = legalMovesFrom(sq);
+    render();
+    return;
+  }
+  // 尝试走棋
+  const mv = { from: selected, to: sq };
+  if (!legalFromSelected.some(m => m.to === sq)) {
+    return; // 非法
+  }
+  doMove(mv);
+}
+
+function doMove(mv) {
+  const cap = makeMoveRaw(mv);
+  moveStack.push({
+    from: mv.from,
+    to: mv.to,
+    captured: cap,
+    prevSide: sideToMove,
+    lastHash: repStack[repStack.length - 1]
+  });
+  sideToMove = 1 - sideToMove;
+  repStack.push(posHash());
+  selected = -1;
+  legalFromSelected = [];
+  lastMove = { from: mv.from, to: mv.to };
+  addMoveToList(mv);
+  render();
+
+  // 判定游戏结束
+  checkGameOver();
+}
+
+function undoMove() {
+  if (moveStack.length === 0) return;
+  const rec = moveStack.pop();
+  sideToMove = rec.prevSide;
+  unmakeMoveRaw({ from: rec.from, to: rec.to }, rec.captured);
+  repStack.pop();
+  selected = -1;
+  legalFromSelected = [];
+  gameOver = false;
+  if (lastMove && (lastMove.from === rec.from && lastMove.to === rec.to)) {
+    lastMove = moveStack.length > 0
+      ? { from: moveStack[moveStack.length-1].from, to: moveStack[moveStack.length-1].to }
+      : null;
+  }
+  // 同步 moveList 选择
+  refreshMoveListSelection();
+  render();
+}
+
+function checkGameOver() {
+  // 1) 是否将死/困毙
+  if (!hasAnyLegalMove(sideToMove)) {
+    gameOver = true;
+    const winner = sideToMove === 0 ? "黑方" : "红方";
+    setStatus((sideToMove === 0 ? "红方" : "黑方") + " 被将死，" + winner + " 获胜！", true);
+    return;
+  }
+  // 2) 长将检测 (任一方连续将军导致 3 次重复)
+  const h = repStack[repStack.length - 1];
+  if (countRepetitions(h) >= 3) {
+    gameOver = true;
+    // 谁在长将, 谁负
+    const last = moveStack[moveStack.length - 1];
+    const mover = last.prevSide;
+    const loser = mover === 0 ? "红方" : "黑方";
+    setStatus("长打作负，" + loser + " 判负！", true);
+    return;
+  }
+  // 3) 将帅对面 (flying general) - 由 inCheck 中的将帅对脸检测保证
+  if (inCheck(sideToMove)) {
+    setStatus((sideToMove === 0 ? "红方" : "黑方") + " 被将军！", true);
+  } else {
+    setStatus((sideToMove === 0 ? "红方" : "黑方") + " 走棋");
+  }
+}
+
+/* ---- 渲染 ---- */
+const boardEl = document.getElementById("board");
+const piecesLayer = document.createElement("div");
+piecesLayer.style.position = "relative";
+piecesLayer.style.width = "0";
+piecesLayer.style.height = "0";
+const { svg: boardSvg, w: bw, h: bh } = drawBoardSVG();
+boardEl.innerHTML = boardSvg;
+boardEl.style.width = bw + "px";
+boardEl.style.height = bh + "px";
+// 让 svg 之外还能放置 piece 元素
+boardEl.style.position = "relative";
+boardEl.appendChild(piecesLayer);
+// 透明的点击接收层 (覆盖整个棋盘)
+const clickLayer = document.createElement("div");
+clickLayer.style.position = "absolute";
+clickLayer.style.left = "0";
+clickLayer.style.top = "0";
+clickLayer.style.width = bw + "px";
+clickLayer.style.height = bh + "px";
+boardEl.appendChild(clickLayer);
+for (let r = 0; r < RANKS; r++) {
+  for (let f = 0; f < FILES; f++) {
+    const sq = sqIdx(f, r);
+    const hit = document.createElement("div");
+    hit.style.position = "absolute";
+    hit.style.left = (BOARD_PAD + f * BOARD_PIXEL - BOARD_PIXEL/2) + "px";
+    hit.style.top  = (BOARD_PAD + r * BOARD_PIXEL - BOARD_PIXEL/2) + "px";
+    hit.style.width = BOARD_PIXEL + "px";
+    hit.style.height = BOARD_PIXEL + "px";
+    hit.style.cursor = "pointer";
+    hit.dataset.sq = sq;
+    hit.addEventListener("click", () => onSquareClick(parseInt(hit.dataset.sq, 10)));
+    clickLayer.appendChild(hit);
+  }
+}
+
+function pixelOfSq(sq) {
+  // 翻转视角
+  if (!flipped) {
+    return { x: BOARD_PAD + sqFile(sq) * BOARD_PIXEL, y: BOARD_PAD + sqRank(sq) * BOARD_PIXEL };
+  } else {
+    return { x: BOARD_PAD + (FILES-1 - sqFile(sq)) * BOARD_PIXEL, y: BOARD_PAD + (RANKS-1 - sqRank(sq)) * BOARD_PIXEL };
+  }
+}
+
+function render() {
+  piecesLayer.innerHTML = "";
+  for (let sq = 0; sq < board.length; sq++) {
+    const pc = board[sq];
+    if (pc === 0) continue;
+    const img = document.createElement("img");
+    img.src = "images/" + IMG_NAME[pc] + ".gif";
+    img.className = "piece" +
+      (sq === selected ? " selected" : "") +
+      (lastMove && (sq === lastMove.from || sq === lastMove.to) ? " lastmove" : "");
+    const p = pixelOfSq(sq);
+    img.style.left = p.x + "px";
+    img.style.top  = p.y + "px";
+    piecesLayer.appendChild(img);
+  }
+  // 可走位置提示
+  for (const mv of legalFromSelected) {
+    const dot = document.createElement("div");
+    dot.className = "indicator";
+    const p = pixelOfSq(mv.to);
+    dot.style.left = p.x + "px";
+    dot.style.top  = p.y + "px";
+    piecesLayer.appendChild(dot);
+  }
+  document.getElementById("fenOut").textContent = toFen();
+  document.getElementById("btnUndo").disabled = moveStack.length === 0;
+}
+
+function setStatus(text, isCheck) {
+  const el = document.getElementById("status");
+  el.textContent = text;
+  el.className = "status" + (isCheck ? " check" : "");
+}
+
+/* ---- 走棋记录 ---- */
+const moveListEl = document.getElementById("moveList");
+function sqToAlg(sq) {
+  const files = "abcdefg";
+  return files[sqFile(sq)] + (RANKS - sqRank(sq));
+}
+function recordToString(rec) {
+  let s = sqToAlg(rec.from) + "-" + sqToAlg(rec.to);
+  if (rec.captured) s = s + "x";
+  return s;
+}
+function addMoveToList(mv) {
+  // 先回填任何残留
+  while (moveListEl.options.length - 1 > moveStack.length) {
+    moveListEl.remove(moveListEl.options.length - 1);
+  }
+  const rec = moveStack[moveStack.length - 1];
+  const text = ((moveStack.length + 1) >> 1) + ". " + recordToString(rec);
+  const opt = document.createElement("option");
+  opt.value = moveStack.length;
+  opt.textContent = text;
+  moveListEl.appendChild(opt);
+  moveListEl.selectedIndex = moveListEl.options.length - 1;
+}
+function refreshMoveListSelection() {
+  // 裁剪到当前 moveStack 长度
+  while (moveListEl.options.length - 1 > moveStack.length) {
+    moveListEl.remove(moveListEl.options.length - 1);
+  }
+  moveListEl.selectedIndex = moveStack.length;
+}
+function jumpToMove() {
+  const idx = moveListEl.selectedIndex - 1; // -1 为初始
+  // 回退到 0
+  while (moveStack.length > 0) undoMove();
+  // 重放到 idx
+  // 由于 undo 已修改了内部状态, 这里采用另一条路径:
+  // 不做逐步回放, 仅恢复视图(简化)
+  render();
+}
+
+/* ---- 控制按钮 ---- */
+function restart() {
+  const sel = document.getElementById("fenSel");
+  fromFen(sel.value);
+  moveStack = [];
+  repStack = [posHash()];
+  selected = -1;
+  legalFromSelected = [];
+  gameOver = false;
+  lastMove = null;
+  // 清空 moveList
+  moveListEl.options.length = 1;
+  moveListEl.selectedIndex = 0;
+  setStatus((sideToMove === 0 ? "红方" : "黑方") + " 走棋");
+  render();
+}
+
+function toggleFlip() {
+  flipped = !flipped;
+  render();
+}
+
+function loadFen(fen) {
+  fromFen(fen);
+  moveStack = [];
+  repStack = [posHash()];
+  selected = -1;
+  legalFromSelected = [];
+  gameOver = false;
+  lastMove = null;
+  moveListEl.options.length = 1;
+  moveListEl.selectedIndex = 0;
+  setStatus((sideToMove === 0 ? "红方" : "黑方") + " 走棋");
+  render();
+}
+
+/* ---- 初始化 ---- */
+fromFen(START_FEN);
+repStack = [posHash()];
+setStatus("红方 走棋");
+render();
+</script>
+</body>
+</html>
