@@ -812,7 +812,7 @@ EMSCRIPTEN_BINDINGS(ffish_js) {
   function("setOption", &ffish::set_option<std::string>);
   function("setOptionInt", &ffish::set_option<int>);
   function("setOptionBool", &ffish::set_option<bool>);
-  function("readGamePGN", &read_game_pgn);
+  function("readGamePGN", &read_game_pgn, allow_raw_pointers());
   function("variants", &ffish::available_variants);
   function("loadVariantConfig", &ffish::load_variant_config);
   function("capturesToHand", &ffish::captures_to_hand);
