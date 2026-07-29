@@ -2,30 +2,44 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mini Xiangqi - Fairy-Stockfish WASM</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Mini Xiangqi - AI</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="container">
-  <h1>Mini Xiangqi <span class="subtitle">(迷你象棋)</span></h1>
-  <div class="status-bar">
-    <div id="status" class="status-loading">Loading engine...</div>
+  <h1>Mini Xiangqi <span class="subtitle">迷你象棋·AI</span></h1>
+
+  <div class="top-bar">
+    <div id="status" class="status-loading">加载引擎中...</div>
+    <label class="ai-toggle">
+      <input type="checkbox" id="ai-mode-toggle" checked>
+      <span class="toggle-label">AI模式</span>
+    </label>
   </div>
-  <div class="main-layout">
-    <div class="board-section">
-      <div id="board-container">
-        <div id="board-display" class="board-display"></div>
-      </div>
-      <div class="board-info">
-        <div id="info-fen" class="info-item">FEN: -</div>
-        <div id="info-turn" class="info-item">Turn: -</div>
-        <div id="info-moves" class="info-item">Legal moves: -</div>
-      </div>
+
+  <div class="board-section">
+    <div id="board-container">
+      <div id="board-display" class="board-display"></div>
     </div>
-    <div class="controls-section">
+  </div>
+
+  <div id="engine-info" class="engine-info">
+    <div class="engine-stats" id="engine-stats">Depth: - &nbsp; Score: - &nbsp; Nodes: -</div>
+    <div class="engine-pv" id="engine-pv">等待分析...</div>
+  </div>
+
+  <div class="button-bar">
+    <button id="btn-undo" class="btn btn-undo" title="悔棋">悔棋</button>
+    <button id="btn-flip" class="btn btn-flip" title="翻转棋盘">翻转</button>
+    <button id="btn-new-game" class="btn btn-new-game" title="新局">新局</button>
+  </div>
+
+  <div class="settings-bar">
+    <button id="btn-settings-toggle" class="btn btn-settings-toggle">设置</button>
+    <div id="settings-panel" class="settings-panel hidden">
       <div class="control-group">
-        <label for="variant-select">Variant:</label>
+        <label for="variant-select">变体:</label>
         <select id="variant-select">
           <option value="minixiangqi" selected>Mini Xiangqi</option>
           <option value="xiangqi">Xiangqi</option>
@@ -35,36 +49,27 @@
         </select>
       </div>
       <div class="control-group">
-        <label for="fen-input">FEN:</label>
-        <input type="text" id="fen-input" placeholder="Enter FEN string or leave empty for start position">
-      </div>
-      <div class="control-group">
-        <label for="search-depth">Search Depth:</label>
+        <label for="search-depth">搜索深度:</label>
         <select id="search-depth">
+          <option value="4">4</option>
+          <option value="6">6</option>
+          <option value="8" selected>8</option>
           <option value="10">10</option>
-          <option value="12" selected>12</option>
-          <option value="15">15</option>
-          <option value="18">18</option>
-          <option value="20">20</option>
+          <option value="12">12</option>
         </select>
       </div>
+      <div class="control-group">
+        <label for="fen-input">FEN:</label>
+        <input type="text" id="fen-input" placeholder="输入FEN或留空使用初始局面">
+      </div>
       <div class="button-group">
-        <button id="btn-new-game" class="btn btn-primary">New Game</button>
-        <button id="btn-set-fen" class="btn btn-secondary">Set FEN</button>
-        <button id="btn-ai-move" class="btn btn-accent">AI Move</button>
-        <button id="btn-undo" class="btn btn-danger">Undo</button>
-      </div>
-      <div class="move-history">
-        <h3>Move History</h3>
-        <div id="move-history" class="move-list"></div>
-      </div>
-      <div class="engine-output">
-        <h3>Engine Output</h3>
-        <pre id="engine-output" class="engine-output-text">Waiting...</pre>
+        <button id="btn-set-fen" class="btn btn-set-fen">设置FEN</button>
+        <button id="btn-ai-move" class="btn btn-ai-move">AI走一步</button>
       </div>
     </div>
   </div>
 </div>
+
 <script src="ffish.js"></script>
 <script src="script.js"></script>
 </body>
