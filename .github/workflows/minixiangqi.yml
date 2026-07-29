@@ -108,11 +108,10 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          # Add WASM build artifacts from the repo root
-          REPO_ROOT=$(git rev-parse --show-toplevel)
+          # Add WASM build artifacts (paths relative to repo root, run from src/)
           STAGED=0
-          for f in tests/js/ffish.js tests/js/ffish.wasm tests/js/ffish.data; do
-            if [ -f "$REPO_ROOT/$f" ]; then
+          for f in ../tests/js/ffish.js ../tests/js/ffish.wasm ../tests/js/ffish.data; do
+            if [ -f "$f" ]; then
               git add -f "$f"
               echo "Staged: $f"
               STAGED=1
