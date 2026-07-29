@@ -81,22 +81,17 @@ jobs:
           expect << 'EOF'
             set timeout 120
             spawn node -e "
-            const Module = require('./ffish.js');
-            Module().then(ffish => {
+            const ffish = require('./ffish.js');
+            ffish['onRuntimeInitialized'] = () => {
               console.log('FFish version:', ffish.info());
-              // Test minixiangqi board with search
               const board = new ffish.Board('minixiangqi');
               console.log('FEN:', board.fen());
               console.log('Legal moves:', board.legalMoves());
               board.delete();
               console.log('WASM engine test PASSED');
-            }).catch(err => {
-              console.error('FAILED:', err);
-              process.exit(1);
-            });
+            };
             "
             expect "PASSED"
-            send "\n"
             expect eof
           EOF
 
