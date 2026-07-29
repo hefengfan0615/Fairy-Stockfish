@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>迷你象棋</title>
+    <style>
+        * { box-sizing: border-box; user-select: none; }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: #2d2416;
+            font-family: 'Segoe UI', 'PingFang SC', Roboto, sans-serif;
+        }
+        .container {
+            background: #d4a56a;
+            padding: 30px 40px 35px 40px;
+            border-radius: 36px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.7), inset 0 1px 4px #f3d9b1;
+            border-bottom: 6px solid #b8894e;
+        }
+        h1 {
+            text-align: center;
+            margin: 0 0 6px 0;
+            font-weight: 400;
+            font-size: 26px;
+            letter-spacing: 8px;
+            color: #f7e9d7;
+            text-shadow: 0 2px 0 #7a5d3a;
+        }
+        .sub {
+            text-align: center;
+            font-size: 14px;
+            color: #eedbc0;
+            margin-top: -6px;
+            margin-bottom: 14px;
+            letter-spacing: 2px;
+        }
+        .board-wrap {
+            display: flex;
+            justify-content: center;
+        }
+        canvas {
+            display: block;
+            width: 560px;
+            height: 560px;
+            border-radius: 20px;
+            background: #f0d5b0;
+            box-shadow: inset 0 0 0 2px #b8894e, 0 8px 0 #7a5d3a;
+            cursor: pointer;
+            touch-action: none;
+        }
+        .info-panel {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 18px;
+            background: #c89a63;
+            padding: 10px 18px;
+            border-radius: 40px;
+            box-shadow: inset 0 2px 6px #a77b4b, 0 4px 0 #7a5d3a;
+            color: #2d1f0e;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .turn-indicator {
+            font-weight: 600;
+            font-size: 18px;
+            background: #2d2416;
+            color: #f0d5b0;
+            padding: 4px 18px;
+            border-radius: 30px;
+            letter-spacing: 1px;
+            white-space: nowrap;
+            box-shadow: inset 0 1px 4px #5f4a2e;
+        }
+        .fen-box {
+            flex: 1;
+            min-width: 160px;
+            background: #f7ede0;
+            padding: 6px 14px;
+            border-radius: 30px;
+            font-family: 'Courier New', monospace;
+            font-size: 15px;
+            font-weight: 500;
+            color: #2d1f0e;
+            box-shadow: inset 0 1px 6px #b8894e;
+            word-break: break-all;
+            text-align: center;
+        }
+        .move-history {
+            flex: 1.2;
+            min-width: 140px;
+            background: #f7ede0;
+            padding: 6px 14px;
+            border-radius: 30px;
+            font-size: 15px;
+            font-weight: 500;
+            color: #2d1f0e;
+            box-shadow: inset 0 1px 6px #b8894e;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            background: #2d2416;
+            border: none;
+            color: #f0d5b0;
+            padding: 6px 18px;
+            border-radius: 30px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #1a130b;
+            transition: all 0.07s;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+        }
+        .btn:active {
+            transform: translateY(4px);
+            box-shadow: none;
+        }
+        .btn:hover {
+            background: #3d3022;
+        }
+        .status {
+            width: 100%;
+            text-align: center;
+            margin-top: 8px;
+            font-size: 17px;
+            font-weight: 600;
+            color: #2d1f0e;
+            background: #eaceb0;
+            padding: 4px 0;
+            border-radius: 40px;
+            letter-spacing: 1px;
+        }
+        @media (max-width: 640px) {
+            .container { padding: 16px 12px 20px 12px; }
+            canvas { width: 88vw; height: 88vw; max-width: 560px; max-height: 560px; }
+            .info-panel { flex-direction: column; align-items: stretch; gap: 8px; }
+            .turn-indicator { text-align: center; }
+            .btn-group { justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>迷你象棋</h1>
+        <div class="board-wrap">
+            <canvas id="boardCanvas" width="700" height="700"></canvas>
+        </div>
+        <div class="info-panel">
+            <div class="turn-indicator" id="turnIndicator">红方走棋</div>
+            <div class="fen-box" id="fenDisplay">rchkhcr/p1ppp1p/7/7/7/P1PPP1P/RCHKHCR</div>
+            <div class="move-history" id="moveHistory">—</div>
+            <div class="btn-group">
+                <button class="btn" id="undoBtn">悔棋</button>
+                <button class="btn" id="flipBtn">翻转</button>
+                <button class="btn" id="resetBtn">新局</button>
+            </div>
+        </div>
+        <div class="status" id="statusMsg">红方先行</div>
+    </div>
+
+    <script>
+        // ============================================================
+        // 迷你象棋 (Mini Xiangqi) – 7x7 棋盘，无河界，无士象
+        // 棋子: K(将/帅) R(车) N(马) C(炮) P(兵/卒)  (FEN中用H/h表示马)
+        // 红方: 大写, 黑方: 小写
+        // 初始 FEN: rchkhcr/p1ppp1p/7/7/7/P1PPP1P/RCHKHCR w - - 0 1
+        // 马走日字，有蹩马腿限制
+        // ============================================================
+
+        const SIZE = 7;
+        const FILES = 'abcdefg';
+
+        const PIECE_NAMES = {
+            'K': '帅', 'k': '将',
+            'R': '车', 'r': '车',
+            'N': '马', 'n': '马',
+            'H': '马', 'h': '马',
+            'C': '炮', 'c': '砲',
+            'P': '兵', 'p': '卒'
+        };
+
+        const CN_DIGITS = ['零','一','二','三','四','五','六','七'];
+        const BLACK_DIGITS = ['0','1','2','3','4','5','6','7'];
+
+        const INIT_FEN = 'rchkhcr/p1ppp1p/7/7/7/P1PPP1P/RCHKHCR w - - 0 1';
+
+        let board = [];
+        let turn = 'w';
+        let moveHistory = [];
+        let selected = null;
+        let legalMoves = [];
+        let gameOver = false;
+        let flipped = false;
+
+        const canvas = document.getElementById('boardCanvas');
+        const ctx = canvas.getContext('2d');
+        const turnIndicator = document.getElementById('turnIndicator');
+        const fenDisplay = document.getElementById('fenDisplay');
+        const moveHistoryEl = document.getElementById('moveHistory');
+        const statusMsg = document.getElementById('statusMsg');
+
+        // ---------- 工具 ----------
+        function isRed(p) { return p && p === p.toUpperCase() && p !== '0'; }
+        function isBlack(p) { return p && p === p.toLowerCase() && p !== '0'; }
+        function inBoard(r,c) { return r>=0 && r<SIZE && c>=0 && c<SIZE; }
+
+        function inPalace(r, c, color) {
+            if (c < 2 || c > 4) return false;
+            if (color === 'w' || color === 'r') { // 红方在下
+                return r >= 4 && r <= 6;
+            } else { // 黑方在上
+                return r >= 0 && r <= 2;
+            }
+        }
+
+        // ---------- FEN 解析/生成 ----------
+        function parseFEN(fen) {
+            const parts = fen.split(' ');
+            const rows = parts[0].split('/');
+            const b = [];
+            for (let r = 0; r < rows.length; r++) {
+                const row = [];
+                let c = 0;
+                for (const ch of rows[r]) {
+                    if (ch >= '1' && ch <= '9') {
+                        const n = parseInt(ch);
+                        for (let i=0; i<n; i++) row.push(0);
+                        c += n;
+                    } else {
+                        row.push(ch);
+                        c++;
+                    }
+                }
+                b.push(row);
+            }
+            return { board: b, turn: parts[1] || 'w' };
+        }
+
+        function generateFEN(b, t) {
+            let fen = '';
+            for (let r=0; r<SIZE; r++) {
+                let empty = 0;
+                for (let c=0; c<SIZE; c++) {
+                    const p = b[r][c];
+                    if (p === 0) { empty++; }
+                    else {
+                        if (empty > 0) { fen += empty; empty = 0; }
+                        fen += p;
+                    }
+                }
+                if (empty > 0) fen += empty;
+                if (r < SIZE-1) fen += '/';
+            }
+            return fen + ' ' + t + ' - - 0 1';
+        }
+
+        // ---------- 走法生成 (带马腿) ----------
+        function generateMovesFor(b, row, col, color) {
+            const piece = b[row][col];
+            if (!piece) return [];
+            const isRedSide = (color === 'w' || color === 'r');
+            const enemy = isRedSide ? isBlack : isRed;
+            const moves = [];
+
+            const canPlace = (r,c) => {
+                if (!inBoard(r,c)) return false;
+                const target = b[r][c];
+                if (target === 0) return true;
+                if (enemy(target)) return true;
+                return false;
+            };
+
+            const p = piece.toLowerCase();
+            const dir = isRedSide ? -1 : 1;
+
+            switch (p) {
+                case 'k': {
+                    const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+                    for (const d of dirs) {
+                        const nr = row + d[0], nc = col + d[1];
+                        if (inPalace(nr, nc, color) && canPlace(nr, nc)) {
+                            moves.push({row:nr, col:nc});
+                        }
+                    }
+                    // 飞将
+                    const enemyKing = isRedSide ? 'k' : 'K';
+                    for (let r=0; r<SIZE; r++) {
+                        if (b[r][col] === enemyKing) {
+                            let blocked = false;
+                            const minR = Math.min(row, r), maxR = Math.max(row, r);
+                            for (let rr=minR+1; rr<maxR; rr++) {
+                                if (b[rr][col] !== 0) { blocked = true; break; }
+                            }
+                            if (!blocked) {
+                                moves.push({row:r, col:col});
+                            }
+                            break;
+                        }
+                    }
+                    break;
+                }
+                case 'r': {
+                    const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+                    for (const d of dirs) {
+                        let r = row + d[0], c = col + d[1];
+                        while (inBoard(r,c)) {
+                            if (b[r][c] === 0) {
+                                moves.push({row:r, col:c});
+                            } else {
+                                if (enemy(b[r][c])) moves.push({row:r, col:c});
+                                break;
+                            }
+                            r += d[0]; c += d[1];
+                        }
+                    }
+                    break;
+                }
+                case 'n': case 'h': {
+                    // 马走日字，蹩马腿判断
+                    // 八个偏移量: [row offset, col offset]
+                    const offsets = [
+                        [-2, -1], [-2, 1],
+                        [-1, -2], [-1, 2],
+                        [1, -2], [1, 2],
+                        [2, -1], [2, 1]
+                    ];
+                    // 对应的马腿位置 (直走一格)
+                    const legOffsets = [
+                        [-1, 0], [-1, 0],
+                        [0, -1], [0, 1],
+                        [0, -1], [0, 1],
+                        [1, 0], [1, 0]
+                    ];
+                    for (let i=0; i<offsets.length; i++) {
+                        const o = offsets[i];
+                        const legR = row + legOffsets[i][0];
+                        const legC = col + legOffsets[i][1];
+                        // 如果马腿位置有棋子，则蹩马腿，跳过
+                        if (b[legR] && b[legR][legC] !== 0) continue;
+                        const nr = row + o[0], nc = col + o[1];
+                        if (canPlace(nr, nc)) {
+                            moves.push({row:nr, col:nc});
+                        }
+                    }
+                    break;
+                }
+                case 'c': {
+                    const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+                    for (const d of dirs) {
+                        let r = row + d[0], c = col + d[1];
+                        let jumped = false;
+                        while (inBoard(r,c)) {
+                            if (!jumped) {
+                                if (b[r][c] === 0) {
+                                    moves.push({row:r, col:c});
+                                } else {
+                                    jumped = true;
+                                }
+                            } else {
+                                if (b[r][c] !== 0) {
+                                    if (enemy(b[r][c])) moves.push({row:r, col:c});
+                                    break;
+                                }
+                            }
+                            r += d[0]; c += d[1];
+                        }
+                    }
+                    break;
+                }
+                case 'p': {
+                    const dirs = [[dir,0],[0,-1],[0,1]];
+                    for (const d of dirs) {
+                        const nr = row + d[0], nc = col + d[1];
+                        if (canPlace(nr, nc)) moves.push({row:nr, col:nc});
+                    }
+                    break;
+                }
+                default: break;
+            }
+            return moves;
+        }
+
+        function getAllMovesFor(b, color) {
+            const all = [];
+            for (let r=0; r<SIZE; r++) {
+                for (let c=0; c<SIZE; c++) {
+                    const p = b[r][c];
+                    if (!p) continue;
+                    const isRedSide = (color === 'w' || color === 'r');
+                    if ((isRedSide && isRed(p)) || (!isRedSide && isBlack(p))) {
+                        const moves = generateMovesFor(b, r, c, color);
+                        for (const m of moves) {
+                            all.push({fromRow:r, fromCol:c, toRow:m.row, toCol:m.col});
+                        }
+                    }
+                }
+            }
+            return all;
+        }
+
+        function findKing(b, color) {
+            const king = (color === 'w' || color === 'r') ? 'K' : 'k';
+            for (let r=0; r<SIZE; r++) {
+                for (let c=0; c<SIZE; c++) {
+                    if (b[r][c] === king) return {row:r, col:c};
+                }
+            }
+            return null;
+        }
+
+        function isInCheck(b, color) {
+            const king = findKing(b, color);
+            if (!king) return true;
+            const enemy = (color === 'w' || color === 'r') ? 'b' : 'w';
+            const allEnemy = getAllMovesFor(b, enemy);
+            for (const m of allEnemy) {
+                if (m.toRow === king.row && m.toCol === king.col) return true;
+            }
+            return false;
+        }
+
+        function makeMove(b, fr, fc, tr, tc) {
+            const nb = b.map(row => [...row]);
+            nb[tr][tc] = nb[fr][fc];
+            nb[fr][fc] = 0;
+            return nb;
+        }
+
+        function wouldBeInCheck(b, fr, fc, tr, tc, color) {
+            const nb = makeMove(b, fr, fc, tr, tc);
+            return isInCheck(nb, color);
+        }
+
+        function getLegalMovesFor(b, row, col, color) {
+            const raw = generateMovesFor(b, row, col, color);
+            const legal = [];
+            for (const m of raw) {
+                if (!wouldBeInCheck(b, row, col, m.row, m.col, color)) {
+                    legal.push(m);
+                }
+            }
+            return legal;
+        }
+
+        function checkGameOver(b, color) {
+            for (let r=0; r<SIZE; r++) {
+                for (let c=0; c<SIZE; c++) {
+                    const p = b[r][c];
+                    if (!p) continue;
+                    const isRedSide = (color === 'w' || color === 'r');
+                    if ((isRedSide && isRed(p)) || (!isRedSide && isBlack(p))) {
+                        const moves = getLegalMovesFor(b, r, c, color);
+                        if (moves.length > 0) return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        // ---------- 中文记谱 ----------
+        function toChineseNotation(b, fromRow, fromCol, toRow, toCol, color) {
+            const piece = b[fromRow][fromCol];
+            if (!piece) return '??';
+            const name = PIECE_NAMES[piece] || piece;
+            const isRedSide = (color === 'w' || color === 'r');
+
+            const fileIdx = isRedSide ? (SIZE - 1 - fromCol) : (SIZE - 1 - fromCol);
+            const fileStr = isRedSide ? CN_DIGITS[fileIdx + 1] : BLACK_DIGITS[fileIdx + 1];
+            const toFileIdx = isRedSide ? (SIZE - 1 - toCol) : (SIZE - 1 - toCol);
+            let direction = '', targetStr = '';
+
+            if (fromCol === toCol) {
+                const delta = toRow - fromRow;
+                const forward = isRedSide ? -1 : 1;
+                if (delta * forward > 0) {
+                    direction = '进';
+                    targetStr = isRedSide ? CN_DIGITS[Math.abs(delta)] : Math.abs(delta).toString();
+                } else if (delta * forward < 0) {
+                    direction = '退';
+                    targetStr = isRedSide ? CN_DIGITS[Math.abs(delta)] : Math.abs(delta).toString();
+                } else {
+                    direction = '平';
+                    targetStr = isRedSide ? CN_DIGITS[toFileIdx + 1] : BLACK_DIGITS[toFileIdx + 1];
+                }
+            } else {
+                direction = '平';
+                targetStr = isRedSide ? CN_DIGITS[toFileIdx + 1] : BLACK_DIGITS[toFileIdx + 1];
+            }
+
+            // 同列多子
+            let prefix = '';
+            const samePieces = [];
+            for (let r=0; r<SIZE; r++) {
+                if (b[r][fromCol] === piece && r !== fromRow) samePieces.push(r);
+            }
+            if (samePieces.length > 0) {
+                const sorted = samePieces.sort((a,b) => isRedSide ? a-b : b-a);
+                const frontRow = isRedSide ? Math.min(...sorted) : Math.max(...sorted);
+                const isFront = isRedSide ? (fromRow < frontRow) : (fromRow > frontRow);
+                prefix = isFront ? '前' : '后';
+                return prefix + name + direction + targetStr;
+            }
+            return name + fileStr + direction + targetStr;
+        }
+
+        // ---------- 核心操作 ----------
+        function tryMove(fromRow, fromCol, toRow, toCol) {
+            if (gameOver) return false;
+            const piece = board[fromRow][fromCol];
+            if (!piece) return false;
+            const color = isRed(piece) ? 'w' : 'b';
+            if (color !== turn) return false;
+
+            const legal = getLegalMovesFor(board, fromRow, fromCol, turn);
+            if (!legal.some(m => m.row === toRow && m.col === toCol)) return false;
+
+            const captured = board[toRow][toCol];
+            const chinese = toChineseNotation(board, fromRow, fromCol, toRow, toCol, turn);
+            const fenBefore = generateFEN(board, turn);
+
+            board = makeMove(board, fromRow, fromCol, toRow, toCol);
+            const nextTurn = (turn === 'w') ? 'b' : 'w';
+
+            moveHistory.push({
+                from: {row:fromRow, col:fromCol},
+                to: {row:toRow, col:toCol},
+                piece, captured, fen: fenBefore, chinese, turn
+            });
+
+            turn = nextTurn;
+
+            if (captured === 'K' || captured === 'k') {
+                gameOver = true;
+                statusMsg.textContent = '🏆 ' + (isRed(piece) ? '红方' : '黑方') + '胜！ (吃将)';
+                render(); updateInfo();
+                return true;
+            }
+
+            if (checkGameOver(board, turn)) {
+                gameOver = true;
+                const winner = (turn === 'w') ? '黑方' : '红方';
+                statusMsg.textContent = '🏆 ' + winner + '胜！ (将死)';
+                render(); updateInfo();
+                return true;
+            }
+
+            statusMsg.textContent = isInCheck(board, turn) ? (turn==='w'?'红方':'黑方')+'被将军！' : (turn==='w'?'红方':'黑方')+'走棋';
+            render(); updateInfo();
+            return true;
+        }
+
+        function undoMove() {
+            if (moveHistory.length === 0) return;
+            const last = moveHistory.pop();
+            board[last.from.row][last.from.col] = last.piece;
+            board[last.to.row][last.to.col] = last.captured || 0;
+            turn = last.turn;
+            gameOver = false;
+            selected = null; legalMoves = [];
+            statusMsg.textContent = (turn==='w'?'红方':'黑方')+'走棋';
+            render(); updateInfo();
+        }
+
+        function resetGame() {
+            const parsed = parseFEN(INIT_FEN);
+            board = parsed.board;
+            turn = 'w';
+            moveHistory = [];
+            selected = null; legalMoves = [];
+            gameOver = false;
+            statusMsg.textContent = '红方先行';
+            render(); updateInfo();
+        }
+
+        function toggleFlip() {
+            flipped = !flipped;
+            selected = null; legalMoves = [];
+            render(); updateInfo();
+        }
+
+        // ---------- 渲染 (支持翻转) ----------
+        function render() {
+            const W = canvas.width, H = canvas.height;
+            const cellSize = W / SIZE;
+            const pieceRadius = cellSize * 0.40;
+
+            ctx.clearRect(0,0,W,H);
+
+            // 背景
+            const grad = ctx.createRadialGradient(W/2, H/2, 50, W/2, H/2, W*0.7);
+            grad.addColorStop(0, '#f5e0c0');
+            grad.addColorStop(1, '#dbbd93');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0,0,W,H);
+
+            // 网格
+            ctx.strokeStyle = '#6a4e2e';
+            ctx.lineWidth = 1.8;
+            for (let i=0; i<SIZE; i++) {
+                const x = i * cellSize + cellSize/2;
+                const y = i * cellSize + cellSize/2;
+                ctx.beginPath();
+                ctx.moveTo(cellSize/2, y);
+                ctx.lineTo(W - cellSize/2, y);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(x, cellSize/2);
+                ctx.lineTo(x, H - cellSize/2);
+                ctx.stroke();
+            }
+
+            // 九宫斜线
+            ctx.strokeStyle = '#6a4e2e';
+            ctx.lineWidth = 1.8;
+            // 红方 (下)
+            const r1 = 4, r2 = 6, c1 = 2, c2 = 4;
+            const x1 = c1 * cellSize + cellSize/2, y1 = r1 * cellSize + cellSize/2;
+            const x2 = c2 * cellSize + cellSize/2, y2 = r2 * cellSize + cellSize/2;
+            ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(x2, y1); ctx.lineTo(x1, y2); ctx.stroke();
+            // 黑方 (上)
+            const r1b = 0, r2b = 2;
+            const y1b = r1b * cellSize + cellSize/2, y2b = r2b * cellSize + cellSize/2;
+            ctx.beginPath(); ctx.moveTo(x1, y1b); ctx.lineTo(x2, y2b); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(x2, y1b); ctx.lineTo(x1, y2b); ctx.stroke();
+
+            // 坐标标注
+            ctx.fillStyle = '#7a5d3a';
+            ctx.font = '14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            for (let i=0; i<SIZE; i++) {
+                const idx = flipped ? (SIZE-1-i) : i;
+                const x = i * cellSize + cellSize/2;
+                const labelR = CN_DIGITS[SIZE - idx];
+                ctx.fillText(labelR, x, 4);
+                const labelB = (SIZE - idx).toString();
+                ctx.fillText(labelB, x, H - 20);
+            }
+
+            // 画棋子
+            const getDisplay = (r,c) => {
+                if (!flipped) return {row:r, col:c};
+                return {row: SIZE-1-r, col: SIZE-1-c};
+            };
+
+            for (let r=0; r<SIZE; r++) {
+                for (let c=0; c<SIZE; c++) {
+                    const p = board[r][c];
+                    if (!p) continue;
+                    const d = getDisplay(r,c);
+                    const x = d.col * cellSize + cellSize/2;
+                    const y = d.row * cellSize + cellSize/2;
+                    const isRedSide = isRed(p);
+                    const isSelected = selected && selected.row === r && selected.col === c;
+
+                    ctx.shadowColor = 'rgba(0,0,0,0.25)';
+                    ctx.shadowBlur = 6;
+                    ctx.shadowOffsetX = 2;
+                    ctx.shadowOffsetY = 3;
+
+                    const grad2 = ctx.createRadialGradient(x-6, y-6, 4, x, y, pieceRadius+4);
+                    if (isRedSide) {
+                        grad2.addColorStop(0, '#f5d6c0');
+                        grad2.addColorStop(0.7, '#c04030');
+                        grad2.addColorStop(1, '#7a2218');
+                    } else {
+                        grad2.addColorStop(0, '#e0e0e0');
+                        grad2.addColorStop(0.6, '#2a2a2a');
+                        grad2.addColorStop(1, '#0a0a0a');
+                    }
+                    ctx.beginPath();
+                    ctx.arc(x, y, pieceRadius, 0, Math.PI*2);
+                    ctx.fillStyle = grad2;
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                    ctx.shadowOffsetX = 0;
+                    ctx.shadowOffsetY = 0;
+
+                    ctx.strokeStyle = isRedSide ? '#5a1a0a' : '#1a1a1a';
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.arc(x-5, y-7, 5, 0, Math.PI*2);
+                    ctx.fillStyle = isRedSide ? 'rgba(255,200,180,0.25)' : 'rgba(255,255,255,0.15)';
+                    ctx.fill();
+
+                    ctx.shadowBlur = 0;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    const name = PIECE_NAMES[p] || p;
+                    ctx.font = `bold ${pieceRadius*1.2}px "KaiTi","STKaiti","SimSun",serif`;
+                    ctx.fillStyle = isRedSide ? '#fcf3e0' : '#e8e8e8';
+                    ctx.shadowColor = isRedSide ? 'rgba(80,0,0,0.6)' : 'rgba(0,0,0,0.7)';
+                    ctx.shadowBlur = 8;
+                    ctx.shadowOffsetX = 1;
+                    ctx.shadowOffsetY = 1;
+                    ctx.fillText(name, x, y+1);
+                    ctx.shadowBlur = 0;
+                    ctx.shadowOffsetX = 0;
+                    ctx.shadowOffsetY = 0;
+                    ctx.strokeStyle = isRedSide ? '#5a1a0a' : '#1a1a1a';
+                    ctx.lineWidth = 0.8;
+                    ctx.strokeText(name, x, y+1);
+                    ctx.fillStyle = isRedSide ? '#fcf3e0' : '#e8e8e8';
+                    ctx.fillText(name, x, y+1);
+
+                    if (isSelected) {
+                        ctx.strokeStyle = '#ffdd44';
+                        ctx.lineWidth = 3.5;
+                        ctx.beginPath();
+                        ctx.arc(x, y, pieceRadius+5, 0, Math.PI*2);
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            // 合法走法提示
+            for (const m of legalMoves) {
+                const d = getDisplay(m.row, m.col);
+                const x = d.col * cellSize + cellSize/2;
+                const y = d.row * cellSize + cellSize/2;
+                const target = board[m.row][m.col];
+                if (target === 0) {
+                    ctx.fillStyle = 'rgba(50,180,80,0.45)';
+                    ctx.beginPath();
+                    ctx.arc(x, y, 12, 0, Math.PI*2);
+                    ctx.fill();
+                } else {
+                    ctx.strokeStyle = 'rgba(220,50,50,0.7)';
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.arc(x, y, pieceRadius+4, 0, Math.PI*2);
+                    ctx.stroke();
+                }
+            }
+
+            ctx.strokeStyle = '#6a4e2e';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(cellSize/2-2, cellSize/2-2, W-cellSize+4, H-cellSize+4);
+        }
+
+        function updateInfo() {
+            fenDisplay.textContent = generateFEN(board, turn);
+            const turnName = turn === 'w' ? '红方' : '黑方';
+            turnIndicator.textContent = gameOver ? '⚔ 已结束' : turnName + '走棋';
+            turnIndicator.style.background = turn === 'w' ? '#6d2a1a' : '#1a1a1a';
+            if (moveHistory.length > 0) {
+                const last = moveHistory[moveHistory.length-1];
+                const idx = moveHistory.length;
+                const label = (last.turn === 'w' ? '红' : '黑');
+                moveHistoryEl.textContent = `第${idx}手 ${label} ${last.chinese}`;
+            } else {
+                moveHistoryEl.textContent = '—';
+            }
+        }
+
+        // ---------- 事件 ----------
+        function handleCanvasClick(e) {
+            if (gameOver) return;
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const clientX = e.clientX || e.touches[0].clientX;
+            const clientY = e.clientY || e.touches[0].clientY;
+            const x = (clientX - rect.left) * scaleX;
+            const y = (clientY - rect.top) * scaleY;
+            const cellSize = canvas.width / SIZE;
+            const col = Math.floor(x / cellSize);
+            const row = Math.floor(y / cellSize);
+            if (!inBoard(row, col)) return;
+
+            let actualRow = row, actualCol = col;
+            if (flipped) {
+                actualRow = SIZE - 1 - row;
+                actualCol = SIZE - 1 - col;
+            }
+
+            const piece = board[actualRow][actualCol];
+
+            if (selected) {
+                const isLegal = legalMoves.some(m => m.row === actualRow && m.col === actualCol);
+                if (isLegal) {
+                    tryMove(selected.row, selected.col, actualRow, actualCol);
+                    selected = null; legalMoves = [];
+                    render(); updateInfo();
+                    return;
+                }
+                if (piece && ((turn==='w' && isRed(piece)) || (turn==='b' && isBlack(piece)))) {
+                    selected = {row:actualRow, col:actualCol};
+                    legalMoves = getLegalMovesFor(board, actualRow, actualCol, turn);
+                    render(); updateInfo();
+                    return;
+                }
+                selected = null; legalMoves = [];
+                render(); updateInfo();
+                return;
+            }
+
+            if (piece && ((turn==='w' && isRed(piece)) || (turn==='b' && isBlack(piece)))) {
+                const moves = getLegalMovesFor(board, actualRow, actualCol, turn);
+                if (moves.length > 0) {
+                    selected = {row:actualRow, col:actualCol};
+                    legalMoves = moves;
+                } else {
+                    selected = null; legalMoves = [];
+                }
+                render(); updateInfo();
+            }
+        }
+
+        // ---------- 初始化 ----------
+        function init() {
+            resetGame();
+            canvas.addEventListener('click', handleCanvasClick);
+            canvas.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                handleCanvasClick(e);
+            });
+            document.getElementById('undoBtn').addEventListener('click', () => {
+                undoMove();
+                render(); updateInfo();
+            });
+            document.getElementById('flipBtn').addEventListener('click', () => {
+                toggleFlip();
+                render(); updateInfo();
+            });
+            document.getElementById('resetBtn').addEventListener('click', () => {
+                resetGame();
+                render(); updateInfo();
+            });
+        }
+
+        init();
+    </script>
+</body>
+</html>
