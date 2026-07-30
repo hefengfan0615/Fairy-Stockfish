@@ -651,6 +651,11 @@ private:
     }
     v = get_variant(uciVariant);
     UCI::init_variant(v);
+    // Set variant-specific EvalFile for minixiangqi
+    if (uciVariant == "minixiangqi") {
+        Options["EvalFile"] = std::string("minixiangqi.nnue");
+        Eval::NNUE::init();
+    }
     this->resetStates();
     if (fen == "")
       fen = v->startFen;

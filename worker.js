@@ -12,6 +12,8 @@ async function initEngine() {
     ffish = await Module.default({
         locateFile: (path) => './tests/js/' + path
     });
+    // Set EvalFile for minixiangqi variant
+    ffish.setOption('EvalFile', 'minixiangqi.nnue');
 }
 
 // 开始 go infinite 分析
