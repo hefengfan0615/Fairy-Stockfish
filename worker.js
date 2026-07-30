@@ -1,5 +1,6 @@
 // Mini Xiangqi (迷你象棋) WASM Engine Worker
 // Uses Fairy-Stockfish UCI engine via stockfish-web.js for real analysis
+// Engine initialization pattern references stockfish.js (https://github.com/nmrugg/stockfish.js)
 
 let engine = null;
 let engineReady = false;
@@ -15,7 +16,7 @@ async function loadEngine() {
         const StockfishEngine = module.default;
 
         // Set up output handlers BEFORE module initialization
-        // so we don't miss any output
+        // (this is the pattern used by stockfish.js - nmrugg)
         const moduleArgs = {
             print: (line) => {
                 if (line.startsWith('info depth')) {
@@ -61,6 +62,7 @@ async function loadEngine() {
         await sleep(200);
         sendCommand('setoption name UCI_Variant value minixiangqi');
         sendCommand('setoption name Use NNUE value true');
+        sendCommand('setoption name EvalFile value minixiangqi.nnue');
         sendCommand('isready');
 
         self.postMessage({ type: 'ready' });

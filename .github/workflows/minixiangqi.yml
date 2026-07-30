@@ -98,16 +98,17 @@ jobs:
           rm -f /tmp/test_pass /tmp/test_fail
           cat > test_engine.js << 'JSEOF'
           const fs = require('fs');
+
+          let output = '';
+          let engineModule = null;
+
+          // Pass print/printErr as options BEFORE module initialization
+          // (this is the pattern used by stockfish.js)
           const Stockfish = require('./stockfish.js');
-
-          Stockfish().then(Module => {
-              let output = '';
-
-              Module.print = (line) => {
+          Stockfish({
+              print: (line) => {
                   output += line + '\n';
                   process.stdout.write('[engine] ' + line + '\n');
-                  // Write result to file when bestmove is received
-                  // (process.exit does not work with WASM pthreads)
                   if (line.includes('bestmove')) {
                       console.error('[test] Got bestmove!');
                       if (output.includes('info depth')) {
@@ -118,10 +119,12 @@ jobs:
                           fs.writeFileSync('/tmp/test_fail', '1');
                       }
                   }
-              };
-              Module.printErr = (line) => {
+              },
+              printErr: (line) => {
                   process.stderr.write('[stderr] ' + line + '\n');
-              };
+              }
+          }).then(Module => {
+              engineModule = Module;
 
               // Wait for engine to be ready
               function checkReady(cb) {
@@ -138,6 +141,7 @@ jobs:
                       'uci',
                       'setoption name UCI_Variant value minixiangqi',
                       'setoption name Use NNUE value true',
+                      'setoption name EvalFile value minixiangqi.nnue',
                       'isready',
                       'position startpos',
                       'go depth 20'
@@ -158,14 +162,17 @@ jobs:
 
                   setTimeout(sendNext, 500);
               });
-
-              // Safety timeout
-              setTimeout(() => {
-                  console.error('ERROR: Timeout waiting for bestmove. Output so far:');
-                  console.error(output);
-                  fs.writeFileSync('/tmp/test_fail', '1');
-              }, 120000);
+          }).catch(err => {
+              console.error('ERROR: Module initialization failed:', err);
+              fs.writeFileSync('/tmp/test_fail', '1');
           });
+
+          // Safety timeout
+          setTimeout(() => {
+              console.error('ERROR: Timeout waiting for bestmove. Output so far:');
+              console.error(output);
+              fs.writeFileSync('/tmp/test_fail', '1');
+          }, 120000);
           JSEOF
           timeout 180 node test_engine.js 2>&1 || true
           if [ -f /tmp/test_pass ]; then
