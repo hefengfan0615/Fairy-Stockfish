@@ -19,7 +19,9 @@
 #ifndef UCI_H_INCLUDED
 #define UCI_H_INCLUDED
 
+#include <deque>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -30,6 +32,8 @@
 namespace Stockfish {
 
 class Position;
+struct StateInfo;
+typedef std::unique_ptr<std::deque<StateInfo>> StateListPtr;
 
 namespace UCI {
 
