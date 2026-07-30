@@ -51,7 +51,7 @@ jobs:
       - name: Build UCI WASM engine with pthreads
         run: |
           emcc -o stockfish.js -s WASM=1 -s ENVIRONMENT=node -s NODERAWFS=1 \
-            -s USE_PTHREADS=1 -s PTHREAD_POOL_SIZE=2 -s EXIT_RUNTIME=1 \
+            -s USE_PTHREADS=1 -s PROXY_TO_PTHREAD -s PTHREAD_POOL_SIZE=2 -s EXIT_RUNTIME=1 \
             -s INITIAL_MEMORY=64MB -s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=1GB \
             -DNNUE_EMBEDDING_OFF \
             -DLARGEBOARDS -DPRECOMPUTED_MAGICS -DALLVARS \
@@ -66,7 +66,16 @@ jobs:
 
       - name: Test minixiangqi go depth 20
         run: |
-          { printf 'uci\nsetoption name EvalFile value minixiangqi.nnue\nsetoption name Use NNUE value true\nsetoption name UCI_Variant value minixiangqi\nisready\nposition startpos\ngo depth 20\n'; sleep 30; printf 'quit\n'; } | timeout 120 node stockfish.js 2>&1 || true
+          timeout 120 node stockfish.js 2>&1 << 'EOF' || true
+          uci
+          setoption name EvalFile value minixiangqi.nnue
+          setoption name Use NNUE value true
+          setoption name UCI_Variant value minixiangqi
+          isready
+          position startpos
+          go depth 20
+          quit
+          EOF
 
       - name: Commit WASM files to repo for Vercel deployment
         run: |
