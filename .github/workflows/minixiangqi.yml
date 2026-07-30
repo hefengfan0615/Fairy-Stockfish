@@ -51,7 +51,7 @@ jobs:
       - name: Build UCI WASM engine with pthreads
         run: |
           emcc -o stockfish.js -s WASM=1 -s ENVIRONMENT=node -s NODERAWFS=1 \
-            -s USE_PTHREADS=1 -s PTHREAD_POOL_SIZE=1 \
+            -s USE_PTHREADS=1 -s PTHREAD_POOL_SIZE=1 -s EXIT_RUNTIME=1 \
             -s TOTAL_MEMORY=64MB -s ALLOW_MEMORY_GROWTH=1 -s WASM_MEM_MAX=1GB \
             -DNNUE_EMBEDDING_OFF \
             -DLARGEBOARDS -DPRECOMPUTED_MAGICS -DALLVARS \
@@ -76,6 +76,19 @@ jobs:
           go depth 20
           quit
           EOF
+
+      - name: Commit WASM files to repo for Vercel deployment
+        run: |
+          cd ..
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add ffish.js ffish.wasm vercel.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "deploy: update WASM build [skip ci]"
+            git push origin master
+          fi
 
       - name: Upload WASM artifacts
         uses: actions/upload-artifact@v7
