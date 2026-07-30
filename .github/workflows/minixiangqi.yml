@@ -51,9 +51,10 @@ jobs:
       - name: Build UCI WASM engine with pthreads
         run: |
           emcc -o stockfish.js -s WASM=1 -s ENVIRONMENT=node -s NODERAWFS=1 \
-            -s USE_PTHREADS=1 -s PTHREAD_POOL_SIZE=2 -s EXIT_RUNTIME=0 \
+            -s USE_PTHREADS=1 -s PROXY_TO_PTHREAD -s PTHREAD_POOL_SIZE=2 -s EXIT_RUNTIME=0 \
             -s MODULARIZE=1 -s EXPORT_NAME='Stockfish' \
-            -s EXPORTED_FUNCTIONS='["_main","_command"]' \
+            -s EXPORTED_FUNCTIONS='["_main","_command","_isReady"]' \
+            -s EXPORTED_RUNTIME_METHODS='["ccall"]' \
             -s INITIAL_MEMORY=64MB -s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=1GB \
             -DNNUE_EMBEDDING_OFF \
             -DLARGEBOARDS -DPRECOMPUTED_MAGICS -DALLVARS \
@@ -76,59 +77,81 @@ jobs:
 
               Module.print = (line) => {
                   output += line + '\n';
-                  process.stdout.write(line + '\n');
+                  process.stdout.write('[engine] ' + line + '\n');
               };
               Module.printErr = (line) => {
-                  process.stderr.write(line + '\n');
+                  process.stderr.write('[stderr] ' + line + '\n');
               };
 
-              const commands = [
-                  'uci',
-                  'setoption name EvalFile value minixiangqi.nnue',
-                  'setoption name Use NNUE value true',
-                  'setoption name UCI_Variant value minixiangqi',
-                  'isready',
-                  'position startpos',
-                  'go depth 20'
-              ];
-
-              let i = 0;
-              function sendNext() {
-                  if (i < commands.length) {
-                      Module._command(commands[i]);
-                      i++;
-                      setTimeout(sendNext, 500);
+              // Wait for engine to be ready
+              function checkReady(cb) {
+                  if (Module._isReady && Module._isReady()) {
+                      console.error('[test] Engine is ready');
+                      cb();
                   } else {
-                      // Wait for bestmove, then quit
-                      const checkInterval = setInterval(() => {
-                          if (output.includes('bestmove')) {
-                              clearInterval(checkInterval);
-                              setTimeout(() => {
-                                  Module._command('quit');
-                                  setTimeout(() => {
-                                      if (!output.includes('info depth')) {
-                                          console.error('ERROR: No info depth lines found!');
-                                          process.exit(1);
-                                      }
-                                      if (!output.includes('bestmove')) {
-                                          console.error('ERROR: No bestmove found!');
-                                          process.exit(1);
-                                      }
-                                      console.error('TEST PASSED');
-                                      process.exit(0);
-                                  }, 1000);
-                              }, 500);
-                          }
-                      }, 500);
-                      // Safety timeout
-                      setTimeout(() => {
-                          console.error('ERROR: Timeout waiting for bestmove');
-                          process.exit(1);
-                      }, 60000);
+                      setTimeout(() => checkReady(cb), 50);
                   }
               }
 
-              setTimeout(sendNext, 1000);
+              checkReady(() => {
+                  const commands = [
+                      'uci',
+                      'setoption name EvalFile value minixiangqi.nnue',
+                      'setoption name Use NNUE value true',
+                      'setoption name UCI_Variant value minixiangqi',
+                      'isready',
+                      'position startpos',
+                      'go depth 20'
+                  ];
+
+                  let i = 0;
+                  function sendNext() {
+                      if (i < commands.length) {
+                          console.error('[test] Sending: ' + commands[i]);
+                          Module.ccall('command', null, ['string'], [commands[i]]);
+                          console.error('[test] Sent: ' + commands[i]);
+                          i++;
+                          setTimeout(sendNext, 500);
+                      } else {
+                          console.error('[test] All commands sent, waiting for bestmove...');
+                          // Wait for bestmove
+                          const checkInterval = setInterval(() => {
+                              if (output.includes('bestmove')) {
+                                  clearInterval(checkInterval);
+                                  console.error('[test] Got bestmove!');
+                                  setTimeout(() => {
+                                      Module.ccall('command', null, ['string'], ['quit']);
+                                      setTimeout(() => {
+                                          let pass = true;
+                                          if (!output.includes('info depth')) {
+                                              console.error('ERROR: No info depth lines found!');
+                                              pass = false;
+                                          }
+                                          if (!output.includes('bestmove')) {
+                                              console.error('ERROR: No bestmove found!');
+                                              pass = false;
+                                          }
+                                          if (pass) {
+                                              console.error('TEST PASSED');
+                                              process.exit(0);
+                                          } else {
+                                              process.exit(1);
+                                          }
+                                      }, 1000);
+                                  }, 500);
+                              }
+                          }, 500);
+                          // Safety timeout
+                          setTimeout(() => {
+                              console.error('ERROR: Timeout waiting for bestmove. Output so far:');
+                              console.error(output);
+                              process.exit(1);
+                          }, 60000);
+                      }
+                  }
+
+                  setTimeout(sendNext, 500);
+              });
           });
           JSEOF
           timeout 120 node test_engine.js || true
