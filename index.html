@@ -239,6 +239,8 @@
 
                     case 'analysis':
                         displayAnalysis(data, e.data.pvChinese);
+                        // 更新箭头渲染
+                        render();
                         break;
 
                     case 'error':
@@ -252,6 +254,9 @@
         }
 
         function sendPositionToWorker() {
+            // 清除旧箭头，等待新分析
+            engineBestMove = null;
+
             if (!analysisWorker || gameOver) {
                 if (gameOver) {
                     document.getElementById('analysisInfo').innerHTML = '<span class="engine-status">游戏已结束</span>';
@@ -314,11 +319,38 @@
             } else {
                 analysisPv.textContent = '';
             }
+
+            // 解析最佳招法用于箭头显示（PV 第一个 UCI 走法）
+            if (pvUci) {
+                const firstMove = pvUci.split(' ')[0];
+                const parsed = parseUciMove(firstMove);
+                if (parsed) {
+                    const piece = board[parsed.fromRow][parsed.fromCol];
+                    engineBestMove = {
+                        fromRow: parsed.fromRow,
+                        fromCol: parsed.fromCol,
+                        toRow: parsed.toRow,
+                        toCol: parsed.toCol,
+                        isRed: piece ? isRed(piece) : (turn === 'w')
+                    };
+                }
+            }
         }
 
         // 生成 UCI 走法字符串
         function toUciMove(fromRow, fromCol, toRow, toCol) {
             return FILES[fromCol] + (SIZE - fromRow) + FILES[toCol] + (SIZE - toRow);
+        }
+
+        // 解析 UCI 走法 (如 "b2b3") 为棋盘坐标
+        function parseUciMove(uci) {
+            if (!uci || uci.length < 4) return null;
+            const fromCol = FILES.indexOf(uci[0]);
+            const fromRow = SIZE - parseInt(uci[1]);
+            const toCol = FILES.indexOf(uci[2]);
+            const toRow = SIZE - parseInt(uci[3]);
+            if (fromCol < 0 || fromRow < 0 || toCol < 0 || toRow < 0) return null;
+            return { fromRow, fromCol, toRow, toCol };
         }
 
         // ============================================================
@@ -349,6 +381,7 @@
         let legalMoves = [];
         let gameOver = false;
         let flipped = false;
+        let engineBestMove = null; // { fromRow, fromCol, toRow, toCol, isRed }
 
         const canvas = document.getElementById('boardCanvas');
         const ctx = canvas.getContext('2d');
@@ -685,8 +718,8 @@
             if (captured === 'K' || captured === 'k') {
                 gameOver = true;
                 statusMsg.textContent = '红方胜！ (吃将)';
-                render(); updateInfo();
                 sendPositionToWorker();
+                render(); updateInfo();
                 return true;
             }
 
@@ -694,14 +727,14 @@
                 gameOver = true;
                 const winner = (turn === 'w') ? '黑方' : '红方';
                 statusMsg.textContent = winner + '胜！ (将死)';
-                render(); updateInfo();
                 sendPositionToWorker();
+                render(); updateInfo();
                 return true;
             }
 
             statusMsg.textContent = isInCheck(board, turn) ? (turn==='w'?'红方':'黑方')+'被将军！' : (turn==='w'?'红方':'黑方')+'走棋';
-            render(); updateInfo();
             sendPositionToWorker();
+            render(); updateInfo();
             return true;
         }
 
@@ -714,8 +747,8 @@
             gameOver = false;
             selected = null; legalMoves = [];
             statusMsg.textContent = (turn==='w'?'红方':'黑方')+'走棋';
-            render(); updateInfo();
             sendPositionToWorker();
+            render(); updateInfo();
         }
 
         function resetGame() {
@@ -726,8 +759,8 @@
             selected = null; legalMoves = [];
             gameOver = false;
             statusMsg.textContent = '红方先行';
-            render(); updateInfo();
             sendPositionToWorker();
+            render(); updateInfo();
         }
 
         function toggleFlip() {
@@ -883,6 +916,61 @@
                     ctx.beginPath();
                     ctx.arc(x, y, pieceRadius+4, 0, Math.PI*2);
                     ctx.stroke();
+                }
+            }
+
+            // 绘制引擎最佳招法箭头
+            if (engineBestMove) {
+                const dFrom = getDisplay(engineBestMove.fromRow, engineBestMove.fromCol);
+                const dTo = getDisplay(engineBestMove.toRow, engineBestMove.toCol);
+                const x1 = dFrom.col * cellSize + cellSize/2;
+                const y1 = dFrom.row * cellSize + cellSize/2;
+                const x2 = dTo.col * cellSize + cellSize/2;
+                const y2 = dTo.row * cellSize + cellSize/2;
+
+                const arrowColor = engineBestMove.isRed ? 'rgba(220,40,40,0.8)' : 'rgba(40,40,220,0.8)';
+                const arrowWidth = 5;
+
+                // 计算方向向量
+                const dx = x2 - x1;
+                const dy = y2 - y1;
+                const len = Math.sqrt(dx*dx + dy*dy);
+                if (len > 0) {
+                    const nx = dx / len;
+                    const ny = dy / len;
+
+                    // 缩短起点和终点（避免被棋子遮挡）
+                    const shorten = pieceRadius + 4;
+                    const sx = x1 + nx * shorten;
+                    const sy = y1 + ny * shorten;
+                    const ex = x2 - nx * shorten;
+                    const ey = y2 - ny * shorten;
+
+                    // 画线
+                    ctx.strokeStyle = arrowColor;
+                    ctx.lineWidth = arrowWidth;
+                    ctx.lineCap = 'round';
+                    ctx.beginPath();
+                    ctx.moveTo(sx, sy);
+                    ctx.lineTo(ex, ey);
+                    ctx.stroke();
+
+                    // 画箭头（三角形箭头）
+                    const arrowSize = 16;
+                    const angle = Math.atan2(ny, nx);
+                    ctx.fillStyle = arrowColor;
+                    ctx.beginPath();
+                    ctx.moveTo(ex, ey);
+                    ctx.lineTo(
+                        ex - arrowSize * Math.cos(angle - 0.4),
+                        ey - arrowSize * Math.sin(angle - 0.4)
+                    );
+                    ctx.lineTo(
+                        ex - arrowSize * Math.cos(angle + 0.4),
+                        ey - arrowSize * Math.sin(angle + 0.4)
+                    );
+                    ctx.closePath();
+                    ctx.fill();
                 }
             }
 

@@ -1,11 +1,10 @@
-// Web Worker: 后台引擎无限分析
-// 使用 time-bounded 搜索循环模拟 go infinite
+// Web Worker: 后台引擎无限分析 (go infinite)
+// 调用 goInfinite 启动搜索线程，setInterval 轮询读取分析结果
 
 let ffish = null;
 let board = null;
 let isAnalyzing = false;
-let pendingRestart = false;
-let pendingData = null;
+let pollTimer = null;
 
 // 动态导入 WASM 引擎
 async function initEngine() {
@@ -15,16 +14,13 @@ async function initEngine() {
     });
 }
 
-// 开始分析循环
+// 开始 go infinite 分析
 function startAnalysis(data) {
     const { fen, moves } = data;
     if (!ffish) return;
 
-    // 清理旧 board
-    if (board) {
-        board.delete();
-        board = null;
-    }
+    // 清理旧 board（先 stop 再 delete）
+    stopAnalysisInternal();
 
     // 初始局面 + moves 设置
     board = new ffish.Board('minixiangqi');
@@ -35,26 +31,15 @@ function startAnalysis(data) {
         }
     }
 
+    // 启动 go infinite 搜索线程
+    board.goInfinite();
     isAnalyzing = true;
-    pendingRestart = false;
-    analysisLoop();
-}
 
-// 分析循环：每次搜索 500ms，模拟无限分析
-function analysisLoop() {
-    if (!isAnalyzing || !board) return;
-
-    // 如果收到重新开始信号，跳过本次结果
-    if (pendingRestart) {
-        pendingRestart = false;
-        startAnalysis(pendingData);
-        return;
-    }
-
-    try {
-        // 搜索 500ms，返回深度/分数/节点/PV
-        const result = board.go(0, 500);
-        if (isAnalyzing && !pendingRestart) {
+    // 每 200ms 轮询读取当前分析结果
+    pollTimer = setInterval(() => {
+        if (!isAnalyzing || !board) return;
+        try {
+            const result = board.getAnalysis();
             // 解析 PV 并转换为中文记谱
             let pvChinese = '';
             const parts = result.split(' ');
@@ -64,26 +49,24 @@ function analysisLoop() {
                 try {
                     pvChinese = board.variationSan(pvUci, ffish.Notation.XIANGQI_WXF, false);
                 } catch (e) {
-                    pvChinese = pvUci; // 转换失败时显示 UCI
+                    pvChinese = pvUci;
                 }
             }
             self.postMessage({ type: 'analysis', data: result, pvChinese });
+        } catch (e) {
+            self.postMessage({ type: 'error', data: e.message || String(e) });
         }
-    } catch (e) {
-        self.postMessage({ type: 'error', data: e.message || String(e) });
-    }
-
-    // 继续下一轮分析
-    if (isAnalyzing) {
-        setTimeout(() => analysisLoop(), 50);
-    }
+    }, 200);
 }
 
-function stopAnalysis() {
+function stopAnalysisInternal() {
     isAnalyzing = false;
-    pendingRestart = false;
-    pendingData = null;
+    if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+    }
     if (board) {
+        try { board.stop(); } catch (e) { /* ignore */ }
         board.delete();
         board = null;
     }
@@ -100,17 +83,12 @@ self.onmessage = async function (e) {
             break;
 
         case 'start':
-            // 如果正在分析中，标记重启
-            if (isAnalyzing) {
-                pendingRestart = true;
-                pendingData = data;
-            } else {
-                startAnalysis(data);
-            }
+            // 直接停止旧分析，开始新分析
+            startAnalysis(data);
             break;
 
         case 'stop':
-            stopAnalysis();
+            stopAnalysisInternal();
             break;
     }
 };

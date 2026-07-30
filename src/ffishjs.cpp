@@ -85,6 +85,8 @@ private:
   Thread* thread;
   std::vector<Move> moveStack;
   bool is960;
+  std::string savedFen;
+  bool savedIs960;
 
 public:
   static bool sfInitialized;
@@ -205,6 +207,75 @@ public:
     // Restore the board state (states was moved by start_thinking)
     this->resetStates();
     this->pos.set(this->v, currentFen, current960, &this->states->back(), this->thread);
+
+    return ss.str();
+  }
+
+  // Start infinite search in background thread
+  void goInfinite() {
+    // Wait for any ongoing search to finish
+    Threads.main()->wait_for_search_finished();
+
+    // Set up infinite limits
+    Search::LimitsType limits;
+    limits.startTime = now();
+    limits.infinite = true;
+
+    // Save current FEN to restore position later
+    this->savedFen = this->pos.fen();
+    this->savedIs960 = this->is960;
+
+    // Start the search (this moves our states) — do NOT wait
+    Threads.start_thinking(this->pos, this->states, limits, false);
+  }
+
+  // Stop the infinite search and restore board state
+  void stop() {
+    Threads.main()->stop = true;
+    Threads.main()->wait_for_search_finished();
+
+    this->resetStates();
+    this->pos.set(this->v, this->savedFen, this->savedIs960, &this->states->back(), this->thread);
+  }
+
+  // Read current analysis while search is running
+  std::string getAnalysis() {
+    std::stringstream ss;
+
+    if (!Threads.main()->rootMoves.empty() && Threads.main()->rootMoves[0].pv[0] != MOVE_NONE)
+    {
+        RootMove& best = Threads.main()->rootMoves[0];
+        ss << "depth " << Threads.main()->completedDepth;
+
+        // Format score
+        Value score = best.score;
+        if (score >= VALUE_MATE_IN_MAX_PLY)
+        {
+            int mateIn = (VALUE_MATE - score + 1) / 2;
+            ss << " score mate " << mateIn;
+        }
+        else if (score <= -VALUE_MATE_IN_MAX_PLY)
+        {
+            int mateIn = (VALUE_MATE + score + 1) / 2;
+            ss << " score mate -" << mateIn;
+        }
+        else
+        {
+            ss << " score cp " << score;
+        }
+
+        ss << " nodes " << Threads.nodes_searched();
+        ss << " pv ";
+        for (Move m : best.pv)
+        {
+            if (m == MOVE_NONE) break;
+            ss << UCI::move(Threads.main()->rootPos, m) << " ";
+        }
+    }
+    else
+    {
+        ss << "depth 0 score cp 0 nodes 0 pv ";
+    }
 
     return ss.str();
   }
@@ -827,6 +898,9 @@ EMSCRIPTEN_BINDINGS(ffish_js) {
     .function("legalMovesSan", &Board::legal_moves_san)
     .function("numberLegalMoves", &Board::number_legal_moves)
     .function("go", &Board::go)
+    .function("goInfinite", &Board::goInfinite)
+    .function("stop", &Board::stop)
+    .function("getAnalysis", &Board::getAnalysis)
     .function("push", &Board::push)
     .function("pushSan", select_overload<bool(std::string)>(&Board::push_san))
     .function("pushSan", select_overload<bool(std::string, Notation)>(&Board::push_san))
