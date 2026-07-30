@@ -156,30 +156,30 @@ public:
     std::string currentFen = this->pos.fen();
     bool current960 = this->is960;
 
-    // Redirect cout to suppress sync_cout output during search
-    std::stringstream coutBuffer;
-    auto oldCoutBuf = std::cout.rdbuf(coutBuffer.rdbuf());
-
-    // Start the search
+    // Start the search via start_thinking (sets up rootPos, rootMoves, etc.)
     Threads.start_thinking(this->pos, this->states, limits, false);
 
     // In single-threaded builds (WASM without pthreads), the idle_loop
-    // thread does not run, so we must call search() directly and then
-    // signal completion to unblock wait_for_search_finished().
-    // Call the iterative deepening search directly (non-virtual).
-    // Initialize time management (normally done in MainThread::search())
-    Color us = Threads.main()->rootPos.side_to_move();
-    Time.init(Threads.main()->rootPos, limits, us, Threads.main()->rootPos.game_ply());
-    TT.new_search();
-    Eval::NNUE::verify();
-    static_cast<Thread*>(Threads.main())->Thread::search();
+    // thread does not run, so we need to call the search synchronously.
+    // Call MainThread::search() via virtual dispatch. This handles:
+    //   - Time.init() / TT.new_search() / Eval::NNUE::verify()
+    //   - Thread::search() (iterative deepening)
+    //   - Threads.stop = true and bestThread selection
+    //   - bestmove output via sync_cout
+    //
+    // Note: MainThread::search() calls Threads.wait_for_search_finished()
+    // internally, which would deadlock in NO_THREADS mode because
+    // searching is never set to false by idle_loop(). So we override
+    // the searching flag after Thread::search() completes.
+    Threads.main()->search();
+
+    // In NO_THREADS builds, searching is still true after MainThread::search()
+    // returns (idle_loop never runs). Set searching = false so that
+    // wait_for_search_finished() does not deadlock.
     Threads.main()->finish_searching();
 
-    // Wait for search to finish
+    // Wait for search to fully complete (returns immediately since searching=false)
     Threads.main()->wait_for_search_finished();
-
-    // Restore cout
-    std::cout.rdbuf(oldCoutBuf);
 
     // Build analysis string
     std::stringstream ss;
