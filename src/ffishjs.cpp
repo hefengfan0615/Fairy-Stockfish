@@ -540,7 +540,7 @@ public:
     return board->move_stack();
   }
 
-  friend Game read_game_pgn(std::string);
+  friend Game* read_game_pgn(std::string);
 };
 
 
@@ -555,8 +555,8 @@ bool skip_comment(const std::string& pgn, size_t& curIdx, size_t& lineEnd) {
   return true;
 }
 
-Game read_game_pgn(std::string pgn) {
-  Game game;
+Game* read_game_pgn(std::string pgn) {
+  Game* game = new Game();
   size_t lineStart = 0;
   bool headersParsed = false;
 
@@ -575,29 +575,29 @@ Game read_game_pgn(std::string pgn) {
       size_t headerItemEnd = pgn.find('"', headerItemStart);
 
       // put item into list
-      game.header[pgn.substr(headerKeyStart, headerKeyEnd-headerKeyStart)] = pgn.substr(headerItemStart, headerItemEnd-headerItemStart);
+      game->header[pgn.substr(headerKeyStart, headerKeyEnd-headerKeyStart)] = pgn.substr(headerItemStart, headerItemEnd-headerItemStart);
     }
     else {
       if (!headersParsed) {
         headersParsed = true;
-        auto it = game.header.find("Variant");
-        if (it != game.header.end()) {
-          game.is960 = it->second.find("960", it->second.size() - 3) != std::string::npos;
-          if (game.is960) {
-            game.variant = it->second.substr(0, it->second.size() - 3);
+        auto it = game->header.find("Variant");
+        if (it != game->header.end()) {
+          game->is960 = it->second.find("960", it->second.size() - 3) != std::string::npos;
+          if (game->is960) {
+            game->variant = it->second.substr(0, it->second.size() - 3);
           } else {
-            game.variant = it->second;
+            game->variant = it->second;
           }
-          std::transform(game.variant.begin(), game.variant.end(), game.variant.begin(),
+          std::transform(game->variant.begin(), game->variant.end(), game->variant.begin(),
           [](unsigned char c){ return std::tolower(c); });
         }
 
-        it = game.header.find("FEN");
-        if (it != game.header.end())
-          game.fen = it->second;
+        it = game->header.find("FEN");
+        if (it != game->header.end())
+          game->fen = it->second;
 
-        game.board = std::make_unique<Board>(game.variant, game.fen, game.is960);
-        game.parsedGame = true;
+        game->board = std::make_unique<Board>(game->variant, game->fen, game->is960);
+        game->parsedGame = true;
       }
 
       // game line
@@ -664,7 +664,7 @@ Game read_game_pgn(std::string pgn) {
           if (annotationChar1 != std::string::npos || annotationChar2 != std::string::npos)
             sanMove = sanMove.substr(0, std::min(annotationChar1, annotationChar2));
           std::cout << sanMove << " ";
-          game.board->push_san(sanMove);
+          game->board->push_san(sanMove);
         }
         curIdx = sanMoveEnd+1;
       }
@@ -754,7 +754,7 @@ EMSCRIPTEN_BINDINGS(ffish_js) {
   function("setOption", &ffish::set_option<std::string>);
   function("setOptionInt", &ffish::set_option<int>);
   function("setOptionBool", &ffish::set_option<bool>);
-  function("readGamePGN", &read_game_pgn);
+  function("readGamePGN", &read_game_pgn, allow_raw_pointers());
   function("variants", &ffish::available_variants);
   function("loadVariantConfig", &ffish::load_variant_config);
   function("capturesToHand", &ffish::captures_to_hand);
