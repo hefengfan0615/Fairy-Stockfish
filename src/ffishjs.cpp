@@ -171,7 +171,7 @@ public:
 
     if (!Threads.main()->rootMoves.empty() && Threads.main()->rootMoves[0].pv[0] != MOVE_NONE)
     {
-        RootMove& best = Threads.main()->rootMoves[0];
+        Search::RootMove& best = Threads.main()->rootMoves[0];
         ss << "depth " << Threads.main()->completedDepth;
 
         // Format score
@@ -231,7 +231,7 @@ public:
 
   // Stop the infinite search and restore board state
   void stop() {
-    Threads.main()->stop = true;
+    Threads.stop = true;
     Threads.main()->wait_for_search_finished();
 
     this->resetStates();
@@ -244,7 +244,7 @@ public:
 
     if (!Threads.main()->rootMoves.empty() && Threads.main()->rootMoves[0].pv[0] != MOVE_NONE)
     {
-        RootMove& best = Threads.main()->rootMoves[0];
+        Search::RootMove& best = Threads.main()->rootMoves[0];
         ss << "depth " << Threads.main()->completedDepth;
 
         // Format score
