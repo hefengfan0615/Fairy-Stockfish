@@ -93,7 +93,7 @@ jobs:
           cp stockfish-web.wasm ../stockfish-web.wasm
           cp stockfish-web.worker.js ../stockfish-web.worker.js 2>/dev/null || true
 
-      - name: Test minixiangqi go depth 15
+      - name: Test minixiangqi go depth 20
         run: |
           cat > test_engine.js << 'JSEOF'
           const Stockfish = require('./stockfish.js');
@@ -104,6 +104,17 @@ jobs:
               Module.print = (line) => {
                   output += line + '\n';
                   process.stdout.write('[engine] ' + line + '\n');
+                  // Exit immediately when bestmove is received
+                  if (line.includes('bestmove')) {
+                      console.error('[test] Got bestmove!');
+                      if (output.includes('info depth')) {
+                          console.error('TEST PASSED');
+                          process.exit(0);
+                      } else {
+                          console.error('ERROR: No info depth lines found!');
+                          process.exit(1);
+                      }
+                  }
               };
               Module.printErr = (line) => {
                   process.stderr.write('[stderr] ' + line + '\n');
@@ -124,9 +135,10 @@ jobs:
                       'uci',
                       'setoption name UCI_Variant value minixiangqi',
                       'setoption name Use NNUE value false',
+                      'setoption name EvalFile value <empty>',
                       'isready',
                       'position startpos',
-                      'go depth 15'
+                      'go depth 20'
                   ];
 
                   let i = 0;
@@ -139,47 +151,21 @@ jobs:
                           setTimeout(sendNext, 500);
                       } else {
                           console.error('[test] All commands sent, waiting for bestmove...');
-                          // Wait for bestmove
-                          const checkInterval = setInterval(() => {
-                              if (output.includes('bestmove')) {
-                                  clearInterval(checkInterval);
-                                  console.error('[test] Got bestmove!');
-                                  setTimeout(() => {
-                                      Module.ccall('command', null, ['string'], ['quit']);
-                                      setTimeout(() => {
-                                          let pass = true;
-                                          if (!output.includes('info depth')) {
-                                              console.error('ERROR: No info depth lines found!');
-                                              pass = false;
-                                          }
-                                          if (!output.includes('bestmove')) {
-                                              console.error('ERROR: No bestmove found!');
-                                              pass = false;
-                                          }
-                                          if (pass) {
-                                              console.error('TEST PASSED');
-                                              process.exit(0);
-                                          } else {
-                                              process.exit(1);
-                                          }
-                                      }, 1000);
-                                  }, 500);
-                              }
-                          }, 500);
-                          // Safety timeout
-                          setTimeout(() => {
-                              console.error('ERROR: Timeout waiting for bestmove. Output so far:');
-                              console.error(output);
-                              process.exit(1);
-                          }, 60000);
                       }
                   }
 
                   setTimeout(sendNext, 500);
               });
+
+              // Safety timeout
+              setTimeout(() => {
+                  console.error('ERROR: Timeout waiting for bestmove. Output so far:');
+                  console.error(output);
+                  process.exit(1);
+              }, 120000);
           });
           JSEOF
-          timeout 120 node test_engine.js || true
+          timeout 180 node test_engine.js || true
 
       - name: Commit WASM files to repo for Vercel deployment
         run: |
