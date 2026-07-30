@@ -220,55 +220,56 @@
         // 马走日字，有蹩马腿限制
         // ============================================================
 
-        // ---------- 加载 WASM 引擎 ----------
-        let ffishEngine = null;
-        let engineBoard = null;
-        let analysisTimer = null;
+        // ---------- Web Worker 引擎管理 ----------
+        let analysisWorker = null;
 
-        async function loadEngine() {
-            try {
-                const Module = await import('./tests/js/ffish.js');
-                const ffish = await Module.default({
-                    locateFile: (path) => './tests/js/' + path
-                });
-                ffishEngine = ffish;
-                engineBoard = new ffish.Board('minixiangqi');
-                document.getElementById('analysisInfo').innerHTML = '<span class="engine-status">引擎已就绪</span>';
-                document.getElementById('analysisPv').textContent = '';
-                // 初始分析
-                triggerAnalysis();
-                return true;
-            } catch (e) {
-                console.error('引擎加载失败:', e);
-                document.getElementById('analysisInfo').innerHTML = '<span class="engine-status">引擎加载失败</span>';
-                return false;
-            }
+        function initWorker() {
+            analysisWorker = new Worker('worker.js', { type: 'module' });
+
+            analysisWorker.onmessage = function (e) {
+                const { type, data } = e.data;
+
+                switch (type) {
+                    case 'ready':
+                        document.getElementById('analysisInfo').innerHTML = '<span class="engine-status">引擎已就绪</span>';
+                        document.getElementById('analysisPv').textContent = '';
+                        // 初始分析
+                        sendPositionToWorker();
+                        break;
+
+                    case 'analysis':
+                        displayAnalysis(data, e.data.pvChinese);
+                        break;
+
+                    case 'error':
+                        console.error('Worker 分析错误:', data);
+                        break;
+                }
+            };
+
+            // 发送初始化消息
+            analysisWorker.postMessage({ type: 'init' });
         }
 
-        function triggerAnalysis() {
-            if (!ffishEngine || !engineBoard || gameOver) {
+        function sendPositionToWorker() {
+            if (!analysisWorker || gameOver) {
                 if (gameOver) {
                     document.getElementById('analysisInfo').innerHTML = '<span class="engine-status">游戏已结束</span>';
                     document.getElementById('analysisPv').textContent = '';
                 }
                 return;
             }
-            // 延迟一小段时间，让 UI 先更新
-            if (analysisTimer) clearTimeout(analysisTimer);
-            analysisTimer = setTimeout(() => {
-                if (!ffishEngine || !engineBoard || gameOver) return;
-                try {
-                    const fen = generateFEN(board, turn);
-                    engineBoard.setFen(fen);
-                    const result = engineBoard.go(10);
-                    displayAnalysis(result);
-                } catch (e) {
-                    console.error('分析出错:', e);
-                }
-            }, 100);
+
+            // 初始局面 + moves 格式
+            const fen = INIT_FEN;
+            const uciMoves = moveHistory.map(m => m.uci);
+            analysisWorker.postMessage({
+                type: 'start',
+                data: { fen, moves: uciMoves }
+            });
         }
 
-        function displayAnalysis(result) {
+        function displayAnalysis(result, pvChinese) {
             const analysisInfo = document.getElementById('analysisInfo');
             const analysisPv = document.getElementById('analysisPv');
 
@@ -298,9 +299,8 @@
                 }
             }
 
-            // 构建信息行
+            // 构建信息行（深度/分数/绝杀/节点 只占一行）
             let infoHtml = '';
-            const scoreNum = parseFloat(score);
             if (score.includes('#')) {
                 infoHtml = `深度: ${depth} &nbsp; 绝杀: <span class="mate">${score}</span> &nbsp; 节点: ${parseInt(nodes).toLocaleString()}`;
             } else {
@@ -308,18 +308,17 @@
             }
             analysisInfo.innerHTML = infoHtml;
 
-            // 转换 PV 为中文记谱
-            if (pvUci) {
-                try {
-                    const pvChinese = engineBoard.variationSan(pvUci, ffishEngine.Notation.XIANGQI_WXF, false);
-                    analysisPv.textContent = pvChinese;
-                } catch (e) {
-                    // 如果转换失败，显示 UCI 走法
-                    analysisPv.textContent = pvUci;
-                }
+            // 思考路径（换行显示，中文记谱）
+            if (pvChinese) {
+                analysisPv.textContent = pvChinese;
             } else {
                 analysisPv.textContent = '';
             }
+        }
+
+        // 生成 UCI 走法字符串
+        function toUciMove(fromRow, fromCol, toRow, toCol) {
+            return FILES[fromCol] + (SIZE - fromRow) + FILES[toCol] + (SIZE - toRow);
         }
 
         // ============================================================
@@ -670,6 +669,7 @@
             const captured = board[toRow][toCol];
             const chinese = toChineseNotation(board, fromRow, fromCol, toRow, toCol, turn);
             const fenBefore = generateFEN(board, turn);
+            const uci = toUciMove(fromRow, fromCol, toRow, toCol);
 
             board = makeMove(board, fromRow, fromCol, toRow, toCol);
             const nextTurn = (turn === 'w') ? 'b' : 'w';
@@ -677,7 +677,7 @@
             moveHistory.push({
                 from: {row:fromRow, col:fromCol},
                 to: {row:toRow, col:toCol},
-                piece, captured, fen: fenBefore, chinese, turn
+                piece, captured, fen: fenBefore, chinese, turn, uci
             });
 
             turn = nextTurn;
@@ -686,7 +686,7 @@
                 gameOver = true;
                 statusMsg.textContent = '红方胜！ (吃将)';
                 render(); updateInfo();
-                triggerAnalysis();
+                sendPositionToWorker();
                 return true;
             }
 
@@ -695,13 +695,13 @@
                 const winner = (turn === 'w') ? '黑方' : '红方';
                 statusMsg.textContent = winner + '胜！ (将死)';
                 render(); updateInfo();
-                triggerAnalysis();
+                sendPositionToWorker();
                 return true;
             }
 
             statusMsg.textContent = isInCheck(board, turn) ? (turn==='w'?'红方':'黑方')+'被将军！' : (turn==='w'?'红方':'黑方')+'走棋';
             render(); updateInfo();
-            triggerAnalysis();
+            sendPositionToWorker();
             return true;
         }
 
@@ -715,7 +715,7 @@
             selected = null; legalMoves = [];
             statusMsg.textContent = (turn==='w'?'红方':'黑方')+'走棋';
             render(); updateInfo();
-            triggerAnalysis();
+            sendPositionToWorker();
         }
 
         function resetGame() {
@@ -727,7 +727,7 @@
             gameOver = false;
             statusMsg.textContent = '红方先行';
             render(); updateInfo();
-            triggerAnalysis();
+            sendPositionToWorker();
         }
 
         function toggleFlip() {
@@ -980,8 +980,8 @@
                 resetGame();
                 render(); updateInfo();
             });
-            // 加载引擎
-            loadEngine();
+            // 加载引擎 Worker
+            initWorker();
         }
 
         init();

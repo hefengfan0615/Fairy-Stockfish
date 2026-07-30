@@ -130,7 +130,10 @@ public:
   }
 
   // Run engine search and return analysis info
-  std::string go(int depth) {
+  // depth > 0: search to given depth
+  // movetime > 0: search for given milliseconds
+  // both 0: search for 1000ms default
+  std::string go(int depth, int movetime) {
     // Wait for any ongoing search to finish
     Threads.main()->wait_for_search_finished();
 
@@ -139,7 +142,9 @@ public:
     limits.startTime = now();
     if (depth > 0)
         limits.depth = depth;
-    else
+    if (movetime > 0)
+        limits.movetime = movetime;
+    if (depth <= 0 && movetime <= 0)
         limits.movetime = 1000; // default 1 second
 
     // Save current FEN to restore position later
