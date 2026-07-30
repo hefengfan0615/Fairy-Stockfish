@@ -26,6 +26,8 @@ tests/syzygy
 tests/js/node_modules
 ffish.js
 *.wasm
+!ffish.js
+!ffish.wasm
 
 # pyffish
 venv
