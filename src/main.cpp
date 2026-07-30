@@ -17,6 +17,7 @@
 */
 
 #include <iostream>
+#include <cstdio>
 
 #include "bitboard.h"
 #include "endgame.h"
@@ -38,6 +39,7 @@ using namespace Stockfish;
 int main(int argc, char* argv[]) {
 
   std::cout << std::unitbuf;
+  setvbuf(stdout, NULL, _IONBF, 0);
   std::cout << engine_info() << std::endl;
 
   pieceMap.init();
