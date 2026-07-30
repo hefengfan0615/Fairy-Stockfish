@@ -85,6 +85,7 @@ void TranspositionTable::resize(size_t mbSize) {
 
 void TranspositionTable::clear() {
 
+#ifndef NO_THREADS
   std::vector<std::thread> threads;
 
   for (size_t idx = 0; idx < Options["Threads"]; ++idx)
@@ -107,6 +108,10 @@ void TranspositionTable::clear() {
 
   for (std::thread& th : threads)
       th.join();
+#else
+  // Single-threaded build: just zero the entire table directly
+  std::memset(table, 0, clusterCount * sizeof(Cluster));
+#endif
 }
 
 
