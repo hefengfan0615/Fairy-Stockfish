@@ -163,7 +163,9 @@ public:
     // In single-threaded builds (WASM without pthreads), the idle_loop
     // thread does not run, so we must call search() directly and then
     // signal completion to unblock wait_for_search_finished().
-    Threads.main()->search();
+    // Use explicit non-virtual call to avoid WASM function table
+    // dispatch issues with virtual calls.
+    static_cast<MainThread*>(Threads.main())->MainThread::search();
     Threads.main()->finish_searching();
 
     // Wait for search to finish
