@@ -66,12 +66,14 @@ jobs:
 
       - name: Test minixiangqi go depth 20
         run: |
-          echo "uci
-setoption name UCI_Variant value minixiangqi
-isready
-position startpos
-go depth 20
-quit" | timeout 120 node stockfish.js 2>&1 || true
+          timeout 120 node stockfish.js 2>&1 << 'EOF' || true
+          uci
+          setoption name UCI_Variant value minixiangqi
+          isready
+          position startpos
+          go depth 20
+          quit
+          EOF
 
       - name: Upload WASM artifacts
         uses: actions/upload-artifact@v7
