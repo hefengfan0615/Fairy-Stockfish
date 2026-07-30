@@ -68,6 +68,8 @@ jobs:
         run: |
           timeout 120 node stockfish.js 2>&1 << 'EOF' || true
           uci
+          setoption name EvalFile value minixiangqi.nnue
+          setoption name Use NNUE value true
           setoption name UCI_Variant value minixiangqi
           isready
           position startpos
