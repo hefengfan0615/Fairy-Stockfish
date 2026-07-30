@@ -144,6 +144,41 @@
             border-radius: 40px;
             letter-spacing: 1px;
         }
+        .analysis-box {
+            margin-top: 12px;
+            background: #c89a63;
+            padding: 10px 16px;
+            border-radius: 16px;
+            box-shadow: inset 0 2px 6px #a77b4b, 0 4px 0 #7a5d3a;
+            font-family: 'Courier New', 'PingFang SC', monospace;
+            font-size: 14px;
+            color: #2d1f0e;
+            min-height: 52px;
+        }
+        .analysis-info {
+            font-weight: 600;
+            line-height: 1.6;
+        }
+        .analysis-info .label {
+            color: #4a3520;
+        }
+        .analysis-info .score {
+            color: #1a6b1a;
+        }
+        .analysis-info .mate {
+            color: #b22222;
+        }
+        .analysis-pv {
+            margin-top: 4px;
+            line-height: 1.5;
+            word-break: break-all;
+            font-size: 15px;
+        }
+        .engine-status {
+            font-size: 13px;
+            color: #5a4530;
+            font-style: italic;
+        }
         @media (max-width: 640px) {
             .container { padding: 16px 12px 20px 12px; }
             canvas { width: 88vw; height: 88vw; max-width: 560px; max-height: 560px; }
@@ -169,16 +204,126 @@
                 <button class="btn" id="resetBtn">新局</button>
             </div>
         </div>
+        <div class="analysis-box" id="analysisBox">
+            <div class="analysis-info" id="analysisInfo"><span class="engine-status">引擎加载中...</span></div>
+            <div class="analysis-pv" id="analysisPv"></div>
+        </div>
         <div class="status" id="statusMsg">红方先行</div>
     </div>
 
-    <script>
+    <script type="module">
         // ============================================================
         // 迷你象棋 (Mini Xiangqi) – 7x7 棋盘，无河界，无士象
         // 棋子: K(将/帅) R(车) N(马) C(炮) P(兵/卒)  (FEN中用H/h表示马)
         // 红方: 大写, 黑方: 小写
         // 初始 FEN: rchkhcr/p1ppp1p/7/7/7/P1PPP1P/RCHKHCR w - - 0 1
         // 马走日字，有蹩马腿限制
+        // ============================================================
+
+        // ---------- 加载 WASM 引擎 ----------
+        let ffishEngine = null;
+        let engineBoard = null;
+        let analysisTimer = null;
+
+        async function loadEngine() {
+            try {
+                const Module = await import('./tests/js/ffish.js');
+                const ffish = await Module.default({
+                    locateFile: (path) => './tests/js/' + path
+                });
+                ffishEngine = ffish;
+                engineBoard = new ffish.Board('minixiangqi');
+                document.getElementById('analysisInfo').innerHTML = '<span class="engine-status">引擎已就绪</span>';
+                document.getElementById('analysisPv').textContent = '';
+                // 初始分析
+                triggerAnalysis();
+                return true;
+            } catch (e) {
+                console.error('引擎加载失败:', e);
+                document.getElementById('analysisInfo').innerHTML = '<span class="engine-status">引擎加载失败</span>';
+                return false;
+            }
+        }
+
+        function triggerAnalysis() {
+            if (!ffishEngine || !engineBoard || gameOver) {
+                if (gameOver) {
+                    document.getElementById('analysisInfo').innerHTML = '<span class="engine-status">游戏已结束</span>';
+                    document.getElementById('analysisPv').textContent = '';
+                }
+                return;
+            }
+            // 延迟一小段时间，让 UI 先更新
+            if (analysisTimer) clearTimeout(analysisTimer);
+            analysisTimer = setTimeout(() => {
+                if (!ffishEngine || !engineBoard || gameOver) return;
+                try {
+                    const fen = generateFEN(board, turn);
+                    engineBoard.setFen(fen);
+                    const result = engineBoard.go(10);
+                    displayAnalysis(result);
+                } catch (e) {
+                    console.error('分析出错:', e);
+                }
+            }, 100);
+        }
+
+        function displayAnalysis(result) {
+            const analysisInfo = document.getElementById('analysisInfo');
+            const analysisPv = document.getElementById('analysisPv');
+
+            // 解析结果: "depth X score cp/mate Y nodes Z pv ..."
+            const parts = result.split(' ');
+            let depth = '', score = '', nodes = '', pvUci = '';
+
+            for (let i = 0; i < parts.length; i++) {
+                if (parts[i] === 'depth' && i + 1 < parts.length) {
+                    depth = parts[++i];
+                } else if (parts[i] === 'score' && i + 1 < parts.length) {
+                    const type = parts[++i];
+                    const val = parts[++i];
+                    if (type === 'cp') {
+                        const cp = parseInt(val);
+                        if (cp > 0) score = '+' + (cp / 100).toFixed(2);
+                        else score = (cp / 100).toFixed(2);
+                    } else if (type === 'mate') {
+                        const mateVal = parseInt(val);
+                        score = '#' + Math.abs(mateVal);
+                    }
+                } else if (parts[i] === 'nodes' && i + 1 < parts.length) {
+                    nodes = parts[++i];
+                } else if (parts[i] === 'pv') {
+                    pvUci = parts.slice(i + 1).join(' ').trim();
+                    break;
+                }
+            }
+
+            // 构建信息行
+            let infoHtml = '';
+            const scoreNum = parseFloat(score);
+            if (score.includes('#')) {
+                infoHtml = `深度: ${depth} &nbsp; 绝杀: <span class="mate">${score}</span> &nbsp; 节点: ${parseInt(nodes).toLocaleString()}`;
+            } else {
+                infoHtml = `深度: ${depth} &nbsp; 分数: <span class="score">${score}</span> &nbsp; 节点: ${parseInt(nodes).toLocaleString()}`;
+            }
+            analysisInfo.innerHTML = infoHtml;
+
+            // 转换 PV 为中文记谱
+            if (pvUci) {
+                try {
+                    const pvChinese = engineBoard.variationSan(pvUci, ffishEngine.Notation.XIANGQI_WXF, false);
+                    analysisPv.textContent = pvChinese;
+                } catch (e) {
+                    // 如果转换失败，显示 UCI 走法
+                    analysisPv.textContent = pvUci;
+                }
+            } else {
+                analysisPv.textContent = '';
+            }
+        }
+
+        // ============================================================
+        // 棋盘 UI 逻辑
         // ============================================================
 
         const SIZE = 7;
@@ -220,9 +365,9 @@
 
         function inPalace(r, c, color) {
             if (c < 2 || c > 4) return false;
-            if (color === 'w' || color === 'r') { // 红方在下
+            if (color === 'w' || color === 'r') {
                 return r >= 4 && r <= 6;
-            } else { // 黑方在上
+            } else {
                 return r >= 0 && r <= 2;
             }
         }
@@ -296,7 +441,6 @@
                             moves.push({row:nr, col:nc});
                         }
                     }
-                    // 飞将
                     const enemyKing = isRedSide ? 'k' : 'K';
                     for (let r=0; r<SIZE; r++) {
                         if (b[r][col] === enemyKing) {
@@ -330,15 +474,12 @@
                     break;
                 }
                 case 'n': case 'h': {
-                    // 马走日字，蹩马腿判断
-                    // 八个偏移量: [row offset, col offset]
                     const offsets = [
                         [-2, -1], [-2, 1],
                         [-1, -2], [-1, 2],
                         [1, -2], [1, 2],
                         [2, -1], [2, 1]
                     ];
-                    // 对应的马腿位置 (直走一格)
                     const legOffsets = [
                         [-1, 0], [-1, 0],
                         [0, -1], [0, 1],
@@ -349,7 +490,6 @@
                         const o = offsets[i];
                         const legR = row + legOffsets[i][0];
                         const legC = col + legOffsets[i][1];
-                        // 如果马腿位置有棋子，则蹩马腿，跳过
                         if (b[legR] && b[legR][legC] !== 0) continue;
                         const nr = row + o[0], nc = col + o[1];
                         if (canPlace(nr, nc)) {
@@ -501,7 +641,6 @@
                 targetStr = isRedSide ? CN_DIGITS[toFileIdx + 1] : BLACK_DIGITS[toFileIdx + 1];
             }
 
-            // 同列多子
             let prefix = '';
             const samePieces = [];
             for (let r=0; r<SIZE; r++) {
@@ -545,21 +684,24 @@
 
             if (captured === 'K' || captured === 'k') {
                 gameOver = true;
-                statusMsg.textContent = '🏆 ' + (isRed(piece) ? '红方' : '黑方') + '胜！ (吃将)';
+                statusMsg.textContent = '红方胜！ (吃将)';
                 render(); updateInfo();
+                triggerAnalysis();
                 return true;
             }
 
             if (checkGameOver(board, turn)) {
                 gameOver = true;
                 const winner = (turn === 'w') ? '黑方' : '红方';
-                statusMsg.textContent = '🏆 ' + winner + '胜！ (将死)';
+                statusMsg.textContent = winner + '胜！ (将死)';
                 render(); updateInfo();
+                triggerAnalysis();
                 return true;
             }
 
             statusMsg.textContent = isInCheck(board, turn) ? (turn==='w'?'红方':'黑方')+'被将军！' : (turn==='w'?'红方':'黑方')+'走棋';
             render(); updateInfo();
+            triggerAnalysis();
             return true;
         }
 
@@ -573,6 +715,7 @@
             selected = null; legalMoves = [];
             statusMsg.textContent = (turn==='w'?'红方':'黑方')+'走棋';
             render(); updateInfo();
+            triggerAnalysis();
         }
 
         function resetGame() {
@@ -584,6 +727,7 @@
             gameOver = false;
             statusMsg.textContent = '红方先行';
             render(); updateInfo();
+            triggerAnalysis();
         }
 
         function toggleFlip() {
@@ -600,14 +744,12 @@
 
             ctx.clearRect(0,0,W,H);
 
-            // 背景
             const grad = ctx.createRadialGradient(W/2, H/2, 50, W/2, H/2, W*0.7);
             grad.addColorStop(0, '#f5e0c0');
             grad.addColorStop(1, '#dbbd93');
             ctx.fillStyle = grad;
             ctx.fillRect(0,0,W,H);
 
-            // 网格
             ctx.strokeStyle = '#6a4e2e';
             ctx.lineWidth = 1.8;
             for (let i=0; i<SIZE; i++) {
@@ -623,22 +765,18 @@
                 ctx.stroke();
             }
 
-            // 九宫斜线
             ctx.strokeStyle = '#6a4e2e';
             ctx.lineWidth = 1.8;
-            // 红方 (下)
             const r1 = 4, r2 = 6, c1 = 2, c2 = 4;
             const x1 = c1 * cellSize + cellSize/2, y1 = r1 * cellSize + cellSize/2;
             const x2 = c2 * cellSize + cellSize/2, y2 = r2 * cellSize + cellSize/2;
             ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(x2, y1); ctx.lineTo(x1, y2); ctx.stroke();
-            // 黑方 (上)
             const r1b = 0, r2b = 2;
             const y1b = r1b * cellSize + cellSize/2, y2b = r2b * cellSize + cellSize/2;
             ctx.beginPath(); ctx.moveTo(x1, y1b); ctx.lineTo(x2, y2b); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(x2, y1b); ctx.lineTo(x1, y2b); ctx.stroke();
 
-            // 坐标标注
             ctx.fillStyle = '#7a5d3a';
             ctx.font = '14px sans-serif';
             ctx.textAlign = 'center';
@@ -652,7 +790,6 @@
                 ctx.fillText(labelB, x, H - 20);
             }
 
-            // 画棋子
             const getDisplay = (r,c) => {
                 if (!flipped) return {row:r, col:c};
                 return {row: SIZE-1-r, col: SIZE-1-c};
@@ -730,7 +867,6 @@
                 }
             }
 
-            // 合法走法提示
             for (const m of legalMoves) {
                 const d = getDisplay(m.row, m.col);
                 const x = d.col * cellSize + cellSize/2;
@@ -758,7 +894,7 @@
         function updateInfo() {
             fenDisplay.textContent = generateFEN(board, turn);
             const turnName = turn === 'w' ? '红方' : '黑方';
-            turnIndicator.textContent = gameOver ? '⚔ 已结束' : turnName + '走棋';
+            turnIndicator.textContent = gameOver ? '已结束' : turnName + '走棋';
             turnIndicator.style.background = turn === 'w' ? '#6d2a1a' : '#1a1a1a';
             if (moveHistory.length > 0) {
                 const last = moveHistory[moveHistory.length-1];
@@ -844,6 +980,8 @@
                 resetGame();
                 render(); updateInfo();
             });
+            // 加载引擎
+            loadEngine();
         }
 
         init();
