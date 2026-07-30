@@ -95,7 +95,9 @@ jobs:
 
       - name: Test minixiangqi go depth 20
         run: |
+          rm -f /tmp/test_pass /tmp/test_fail
           cat > test_engine.js << 'JSEOF'
+          const fs = require('fs');
           const Stockfish = require('./stockfish.js');
 
           Stockfish().then(Module => {
@@ -104,15 +106,16 @@ jobs:
               Module.print = (line) => {
                   output += line + '\n';
                   process.stdout.write('[engine] ' + line + '\n');
-                  // Exit immediately when bestmove is received
+                  // Write result to file when bestmove is received
+                  // (process.exit does not work with WASM pthreads)
                   if (line.includes('bestmove')) {
                       console.error('[test] Got bestmove!');
                       if (output.includes('info depth')) {
                           console.error('TEST PASSED');
-                          process.exit(0);
+                          fs.writeFileSync('/tmp/test_pass', '1');
                       } else {
                           console.error('ERROR: No info depth lines found!');
-                          process.exit(1);
+                          fs.writeFileSync('/tmp/test_fail', '1');
                       }
                   }
               };
@@ -134,8 +137,7 @@ jobs:
                   const commands = [
                       'uci',
                       'setoption name UCI_Variant value minixiangqi',
-                      'setoption name Use NNUE value false',
-                      'setoption name EvalFile value <empty>',
+                      'setoption name Use NNUE value true',
                       'isready',
                       'position startpos',
                       'go depth 20'
@@ -161,11 +163,18 @@ jobs:
               setTimeout(() => {
                   console.error('ERROR: Timeout waiting for bestmove. Output so far:');
                   console.error(output);
-                  process.exit(1);
+                  fs.writeFileSync('/tmp/test_fail', '1');
               }, 120000);
           });
           JSEOF
-          timeout 180 node test_engine.js || true
+          timeout 180 node test_engine.js 2>&1 || true
+          if [ -f /tmp/test_pass ]; then
+            echo "TEST PASSED"
+            exit 0
+          else
+            echo "TEST FAILED"
+            exit 1
+          fi
 
       - name: Commit WASM files to repo for Vercel deployment
         run: |

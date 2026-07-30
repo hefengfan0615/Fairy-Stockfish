@@ -54,7 +54,7 @@ async function loadEngine() {
         // Initialize engine for minixiangqi
         sendCommand('uci');
         sendCommand('setoption name UCI_Variant value minixiangqi');
-        sendCommand('setoption name Use NNUE value false');
+        sendCommand('setoption name Use NNUE value true');
         sendCommand('isready');
 
         self.postMessage({ type: 'ready' });
@@ -117,14 +117,14 @@ function doSearch(fen, moves) {
         return;
     }
 
-    // Set up position
+    // Set up position using the FEN from the main thread
     const movesStr = moves && moves.length > 0 ? ' moves ' + moves.join(' ') : '';
-    sendCommand('position startpos' + movesStr);
+    sendCommand('position fen ' + fen + movesStr);
 
     // Start search
     lastInfoData = null;
     isSearching = true;
-    sendCommand('go depth 15');
+    sendCommand('go depth 20');
 }
 
 // Handle messages from main thread
