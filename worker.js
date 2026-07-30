@@ -13,39 +13,43 @@ async function loadEngine() {
         // Dynamically import the engine module
         const module = await import('./stockfish-web.js');
         const StockfishEngine = module.default;
-        engine = await StockfishEngine();
 
-        engine.print = (line) => {
-            if (line.startsWith('info depth')) {
-                const data = parseInfoLine(line);
-                if (data) {
-                    lastInfoData = data;
-                    self.postMessage({
-                        type: 'analysis',
-                        data: data
-                    });
+        // Set up output handlers BEFORE module initialization
+        // so we don't miss any output
+        const moduleArgs = {
+            print: (line) => {
+                if (line.startsWith('info depth')) {
+                    const data = parseInfoLine(line);
+                    if (data) {
+                        lastInfoData = data;
+                        self.postMessage({
+                            type: 'analysis',
+                            data: data
+                        });
+                    }
+                } else if (line.startsWith('bestmove')) {
+                    isSearching = false;
+                    if (lastInfoData) {
+                        self.postMessage({
+                            type: 'analysis',
+                            data: lastInfoData,
+                            final: true
+                        });
+                    }
+                    // Process pending search if any
+                    if (pendingSearch) {
+                        const ps = pendingSearch;
+                        pendingSearch = null;
+                        doSearch(ps.fen, ps.moves);
+                    }
                 }
-            } else if (line.startsWith('bestmove')) {
-                isSearching = false;
-                if (lastInfoData) {
-                    self.postMessage({
-                        type: 'analysis',
-                        data: lastInfoData,
-                        final: true
-                    });
-                }
-                // Process pending search if any
-                if (pendingSearch) {
-                    const ps = pendingSearch;
-                    pendingSearch = null;
-                    doSearch(ps.fen, ps.moves);
-                }
+            },
+            printErr: (line) => {
+                console.error('[engine]', line);
             }
         };
 
-        engine.printErr = (line) => {
-            console.error('[engine]', line);
-        };
+        engine = await StockfishEngine(moduleArgs);
 
         // Wait for engine to be ready
         await waitForReady();
@@ -53,21 +57,33 @@ async function loadEngine() {
 
         // Initialize engine for minixiangqi
         sendCommand('uci');
+        // Wait a bit for UCI to initialize, then set variant and options
+        await sleep(200);
         sendCommand('setoption name UCI_Variant value minixiangqi');
         sendCommand('setoption name Use NNUE value true');
         sendCommand('isready');
 
         self.postMessage({ type: 'ready' });
     } catch (err) {
+        console.error('Engine initialization error:', err);
         self.postMessage({ type: 'error', data: 'Failed to initialize engine: ' + err.message });
     }
 }
 
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 function waitForReady() {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+        let attempts = 0;
+        const maxAttempts = 200; // 10 seconds
         function check() {
+            attempts++;
             if (engine && engine._isReady && engine._isReady()) {
                 resolve();
+            } else if (attempts >= maxAttempts) {
+                reject(new Error('Engine initialization timed out'));
             } else {
                 setTimeout(check, 50);
             }

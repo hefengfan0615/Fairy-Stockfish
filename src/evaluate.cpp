@@ -86,19 +86,23 @@ namespace Eval {
     // Support multiple variant networks separated by semicolon(Windows)/colon(Unix)
     stringstream ss(eval_file);
     string variant = string(Options["UCI_Variant"]);
-    useNNUE = false;
+    bool nnueEnabledForVariant = false;
     while (getline(ss, eval_file, UCI::SepChar))
     {
         string basename = eval_file.substr(eval_file.find_last_of("\\/") + 1);
         string nnueAlias = variants.find(variant)->second->nnueAlias;
         if (basename.rfind(variant, 0) != string::npos || (!nnueAlias.empty() && basename.rfind(nnueAlias, 0) != string::npos))
         {
-            useNNUE = true;
+            nnueEnabledForVariant = true;
             break;
         }
     }
-    if (!useNNUE)
+    // Fall back to classical evaluation if no NNUE network is configured for this variant
+    if (!nnueEnabledForVariant)
+    {
+        useNNUE = false;
         return;
+    }
 
     currentNnueVariant = variants.find(variant)->second;
 
@@ -135,6 +139,10 @@ namespace Eval {
                     eval_file_loaded = eval_file;
             }
         }
+
+    // Fall back to classical evaluation if the NNUE network file was not loaded successfully
+    if (eval_file_loaded == "None")
+        useNNUE = false;
   }
 
   /// NNUE::verify() verifies that the last net used was loaded successfully
