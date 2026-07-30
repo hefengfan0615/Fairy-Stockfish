@@ -85,6 +85,7 @@ private:
 
 void init(OptionsMap&);
 void loop(int argc, char* argv[]);
+bool process_command(Position& pos, StateListPtr& states, std::vector<Move>& banmoves, const std::string& cmd, int& argc);
 std::string value(Value v);
 std::string square(const Position& pos, Square s);
 std::string dropped_piece(const Position& pos, Move m);

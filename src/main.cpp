@@ -18,6 +18,7 @@
 
 #include <iostream>
 #include <cstdio>
+#include <sstream>
 
 #include "bitboard.h"
 #include "endgame.h"
@@ -35,6 +36,23 @@
 
 
 using namespace Stockfish;
+
+#ifdef __EMSCRIPTEN__
+// Emscripten: bypass stdin entirely. Commands are sent via _command() from JS,
+// keeping the main thread free to process proxied search output.
+static Position* emPos = nullptr;
+static StateListPtr emStates;
+static std::vector<Move> emBanmoves;
+static int emArgc = 1;
+
+extern "C" {
+
+void command(const char* cmd) {
+    UCI::process_command(*emPos, emStates, emBanmoves, std::string(cmd), emArgc);
+}
+
+} // extern "C"
+#endif
 
 int main(int argc, char* argv[]) {
 
@@ -56,11 +74,35 @@ int main(int argc, char* argv[]) {
   Search::clear(); // After threads are up
   Eval::NNUE::init();
 
-  UCI::loop(argc, argv);
+#ifdef __EMSCRIPTEN__
+  // Initialize globals for _command() processing
+  emPos = new Position();
+  emStates = StateListPtr(new std::deque<StateInfo>(1));
+  assert(variants.find(Options["UCI_Variant"])->second != nullptr);
+  emPos->set(variants.find(Options["UCI_Variant"])->second,
+             variants.find(Options["UCI_Variant"])->second->startFen,
+             false, &emStates->back(), Threads.main());
+  XBoard::stateMachine = new XBoard::StateMachine(*emPos, emStates);
 
+  // Check environment for variants.ini file
+  char *envVariantPath = std::getenv("FAIRY_STOCKFISH_VARIANT_PATH");
+  if (envVariantPath != NULL)
+      Options["VariantPath"] = std::string(envVariantPath);
+
+  // Do NOT call UCI::loop() - it would block on getline() and prevent
+  // proxied search output from being processed. Commands come via _command().
+#else
+  UCI::loop(argc, argv);
+#endif
+
+  #ifdef __EMSCRIPTEN__
+  // Do NOT destroy threads or state machine - they need to stay alive
+  // for _command() processing. The runtime stays alive (EXIT_RUNTIME=0).
+#else
   Threads.set(0);
   variants.clear_all();
   pieceMap.clear_all();
   delete XBoard::stateMachine;
+#endif
   return 0;
 }

@@ -51,7 +51,9 @@ jobs:
       - name: Build UCI WASM engine with pthreads
         run: |
           emcc -o stockfish.js -s WASM=1 -s ENVIRONMENT=node -s NODERAWFS=1 \
-            -s USE_PTHREADS=1 -s PROXY_TO_PTHREAD -s PTHREAD_POOL_SIZE=2 -s EXIT_RUNTIME=1 \
+            -s USE_PTHREADS=1 -s PTHREAD_POOL_SIZE=2 -s EXIT_RUNTIME=0 \
+            -s MODULARIZE=1 -s EXPORT_NAME='Stockfish' \
+            -s EXPORTED_FUNCTIONS='["_main","_command"]' \
             -s INITIAL_MEMORY=64MB -s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=1GB \
             -DNNUE_EMBEDDING_OFF \
             -DLARGEBOARDS -DPRECOMPUTED_MAGICS -DALLVARS \
@@ -66,16 +68,70 @@ jobs:
 
       - name: Test minixiangqi go depth 20
         run: |
-          timeout 120 node stockfish.js 2>&1 << 'EOF' || true
-          uci
-          setoption name EvalFile value minixiangqi.nnue
-          setoption name Use NNUE value true
-          setoption name UCI_Variant value minixiangqi
-          isready
-          position startpos
-          go depth 20
-          quit
-          EOF
+          cat > test_engine.js << 'JSEOF'
+          const Stockfish = require('./stockfish.js');
+
+          Stockfish().then(Module => {
+              let output = '';
+
+              Module.print = (line) => {
+                  output += line + '\n';
+                  process.stdout.write(line + '\n');
+              };
+              Module.printErr = (line) => {
+                  process.stderr.write(line + '\n');
+              };
+
+              const commands = [
+                  'uci',
+                  'setoption name EvalFile value minixiangqi.nnue',
+                  'setoption name Use NNUE value true',
+                  'setoption name UCI_Variant value minixiangqi',
+                  'isready',
+                  'position startpos',
+                  'go depth 20'
+              ];
+
+              let i = 0;
+              function sendNext() {
+                  if (i < commands.length) {
+                      Module._command(commands[i]);
+                      i++;
+                      setTimeout(sendNext, 500);
+                  } else {
+                      // Wait for bestmove, then quit
+                      const checkInterval = setInterval(() => {
+                          if (output.includes('bestmove')) {
+                              clearInterval(checkInterval);
+                              setTimeout(() => {
+                                  Module._command('quit');
+                                  setTimeout(() => {
+                                      if (!output.includes('info depth')) {
+                                          console.error('ERROR: No info depth lines found!');
+                                          process.exit(1);
+                                      }
+                                      if (!output.includes('bestmove')) {
+                                          console.error('ERROR: No bestmove found!');
+                                          process.exit(1);
+                                      }
+                                      console.error('TEST PASSED');
+                                      process.exit(0);
+                                  }, 1000);
+                              }, 500);
+                          }
+                      }, 500);
+                      // Safety timeout
+                      setTimeout(() => {
+                          console.error('ERROR: Timeout waiting for bestmove');
+                          process.exit(1);
+                      }, 60000);
+                  }
+              }
+
+              setTimeout(sendNext, 1000);
+          });
+          JSEOF
+          timeout 120 node test_engine.js || true
 
       - name: Commit WASM files to repo for Vercel deployment
         run: |
