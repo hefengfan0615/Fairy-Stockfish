@@ -223,7 +223,7 @@
                         break;
 
                     case 'analysis':
-                        displayAnalysis(data, e.data.pvChinese);
+                        displayAnalysis(data, e.data.pvChinese, e.data);
                         // 更新箭头渲染
                         render();
                         break;
@@ -259,7 +259,7 @@
             });
         }
 
-        function displayAnalysis(result, pvChinese) {
+        function displayAnalysis(result, pvChinese, extra) {
             const analysisInfo = document.getElementById('analysisInfo');
             const analysisPv = document.getElementById('analysisPv');
 
@@ -289,18 +289,27 @@
                 }
             }
 
-            // 构建信息行（深度/分数/绝杀/节点 只占一行）
+            // 构建信息行（深度/合法走法/局面信息）
             let infoHtml = '';
-            if (score.includes('#')) {
-                infoHtml = `深度: ${depth} &nbsp; 绝杀: <span class="mate">${score}</span> &nbsp; 节点: ${parseInt(nodes).toLocaleString()}`;
+            const legalMoves = extra?.legalMoves ?? '?';
+            const isCheck = extra?.isCheck;
+            const isGameOver = extra?.isGameOver;
+            let status = '';
+            if (isGameOver) {
+                status = ' &nbsp; 游戏结束';
+            } else if (isCheck) {
+                status = ' &nbsp; 将军!';
+            }
+            if (score && score !== '0.00') {
+                infoHtml = `深度: ${depth} &nbsp; 分数: <span class="score">${score}</span> &nbsp; 招法: ${legalMoves}${status}`;
             } else {
-                infoHtml = `深度: ${depth} &nbsp; 分数: <span class="score">${score}</span> &nbsp; 节点: ${parseInt(nodes).toLocaleString()}`;
+                infoHtml = `深度: ${depth} &nbsp; 招法: ${legalMoves}${status}`;
             }
             analysisInfo.innerHTML = infoHtml;
 
-            // 思考路径（换行显示，中文记谱）
+            // 思考路径（中文记谱 / 推荐走法）
             if (pvChinese) {
-                analysisPv.textContent = pvChinese;
+                analysisPv.textContent = '推荐: ' + pvChinese;
             } else {
                 analysisPv.textContent = '';
             }

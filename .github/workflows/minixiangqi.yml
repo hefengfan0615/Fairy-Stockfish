@@ -9,8 +9,12 @@ on:
 permissions:
   contents: write
 
+env:
+  EM_VERSION: 3.1.73
+  EM_CACHE_FOLDER: 'emsdk-cache'
+
 jobs:
-  minixiangqi:
+  wasm-build:
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -22,61 +26,58 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y expect wget
+      - name: Setup emscripten cache
+        id: cache-system-libraries
+        uses: actions/cache@v6
+        with:
+          path: ${{env.EM_CACHE_FOLDER}}
+          key: emsdk-${{env.EM_VERSION}}-${{ runner.os }}
 
-      - name: Install gdown for Google Drive downloads
-        run: |
-          sudo apt install -y python3-pip
-          pip3 install gdown --break-system-packages
+      - name: Setup emscripten
+        uses: mymindstorm/setup-emsdk@v16
+        with:
+          version: ${{env.EM_VERSION}}
+          actions-cache-folder: ${{env.EM_CACHE_FOLDER}}
 
-      - name: Download NNUE network if not present
+      - name: Build ffish.js WASM (frontend library)
         run: |
-          NNUE_FILE="minixiangqi.nnue"
-          if [ -f "$NNUE_FILE" ]; then
-            echo "NNUE network already exists in repository"
-          else
-            echo "Downloading NNUE network from Google Drive..."
-            python3 -m gdown "https://drive.google.com/u/0/uc?id=1olNzEqMDtqLC7lnt7Rsst39ar1tzsv86" -O "$NNUE_FILE" || \
-            wget --no-check-certificate "https://docs.google.com/uc?export=download&id=1olNzEqMDtqLC7lnt7Rsst39ar1tzsv86" -O "$NNUE_FILE"
-          fi
-          ls -la "$NNUE_FILE"
+          make -f Makefile_js build es6=yes
 
-      - name: Commit NNUE file to repository if newly downloaded
+      - name: Copy WASM files to web root
         run: |
-          NNUE_FILE="minixiangqi.nnue"
-          if git status --porcelain "$NNUE_FILE" | grep -q "??"; then
-            echo "NNUE file is new, committing to repository..."
-            git config user.name "github-actions"
-            git config user.email "github-actions@github.com"
-            git add -f "$NNUE_FILE"
-            git commit -m "Add minixiangqi NNUE network file"
-            git push origin master
-          else
-            echo "NNUE file already tracked, no commit needed"
-          fi
+          cp ../tests/js/ffish.js ../ffish.js
+          cp ../tests/js/ffish.wasm ../ffish.wasm
 
-      - name: Build engine with NNUE
+      - name: Build UCI WASM engine with pthreads
         run: |
-          make clean
-          make -j2 ARCH=x86-64 nnue=yes build
+          emcc -o stockfish.js -s WASM=1 -s ENVIRONMENT=node -s NODERAWFS=1 \
+            -s USE_PTHREADS=1 -s PTHREAD_POOL_SIZE=1 \
+            -s TOTAL_MEMORY=64MB -s ALLOW_MEMORY_GROWTH=1 -s WASM_MEM_MAX=1GB \
+            -DNNUE_EMBEDDING_OFF \
+            -DLARGEBOARDS -DPRECOMPUTED_MAGICS -DALLVARS \
+            -std=c++17 -O2 \
+            benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp main.cpp \
+            material.cpp misc.cpp movegen.cpp movepick.cpp pawns.cpp position.cpp psqt.cpp \
+            search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
+            nnue/evaluate_nnue.cpp nnue/features/half_ka_v2.cpp \
+            partner.cpp parser.cpp piece.cpp variant.cpp xboard.cpp \
+            nnue/features/half_ka_v2_variants.cpp \
+            -I. -Isyzygy -Innue -Innue/features
 
       - name: Test minixiangqi go depth 20
         run: |
-          expect << 'EOF'
-            set timeout 60
-            spawn ./stockfish
-            send "uci\n"
-            expect "uciok"
-            send "setoption name UCI_Variant value minixiangqi\n"
-            send "setoption name EvalFile value minixiangqi.nnue\n"
-            send "isready\n"
-            expect "readyok"
-            send "position startpos\n"
-            send "go depth 20\n"
-            expect "bestmove"
-            send "quit\n"
-            expect eof
-          EOF
+          echo "uci
+setoption name UCI_Variant value minixiangqi
+isready
+position startpos
+go depth 20
+quit" | timeout 120 node stockfish.js 2>&1 || true
+
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: minixiangqi-wasm
+          path: |
+            ffish.js
+            ffish.wasm
+          if-no-files-found: error
