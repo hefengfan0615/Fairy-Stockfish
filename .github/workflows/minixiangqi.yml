@@ -84,6 +84,10 @@ jobs:
             const board = new ffish.Board('minixiangqi');
             console.log('FEN:', board.fen());
             console.log('Legal moves:', board.legalMoves());
+            // Test engine search at depth 20
+            console.log('Searching at depth 20...');
+            const result = board.go(20, 0);
+            console.log('Search result:', result);
             board.delete();
             console.log('WASM engine test PASSED');
           };
