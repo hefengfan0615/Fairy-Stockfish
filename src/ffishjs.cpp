@@ -157,8 +157,14 @@ public:
     std::stringstream coutBuffer;
     auto oldCoutBuf = std::cout.rdbuf(coutBuffer.rdbuf());
 
-    // Start the search (this moves our states)
+    // Start the search
     Threads.start_thinking(this->pos, this->states, limits, false);
+
+    // In single-threaded builds (WASM without pthreads), the idle_loop
+    // thread does not run, so we must call search() directly and then
+    // signal completion to unblock wait_for_search_finished().
+    Threads.main()->search();
+    Threads.main()->finish_searching();
 
     // Wait for search to finish
     Threads.main()->wait_for_search_finished();

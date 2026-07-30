@@ -55,6 +55,7 @@ public:
   void idle_loop();
   void start_searching();
   void wait_for_search_finished();
+  void finish_searching();
   size_t id() const { return idx; }
 
   Pawns::Table pawnsTable;

@@ -96,6 +96,14 @@ void Thread::wait_for_search_finished() {
 }
 
 
+void Thread::finish_searching() {
+
+  std::lock_guard<std::mutex> lk(mutex);
+  searching = false;
+  cv.notify_one();
+}
+
+
 /// Thread::idle_loop() is where the thread is parked, blocked on the
 /// condition variable, when it has no work to do.
 
