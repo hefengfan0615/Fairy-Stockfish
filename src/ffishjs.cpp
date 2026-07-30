@@ -50,6 +50,8 @@ void initialize_stockfish() {
   Bitboards::init();
   Position::init();
   Bitbases::init();
+  Threads.set(Options["Threads"]);
+  Search::clear(); // After threads are up
 }
 
 #define DELIM " "

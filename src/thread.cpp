@@ -36,9 +36,19 @@ ThreadPool Threads; // Global object
 /// Thread constructor launches the thread and waits until it goes to sleep
 /// in idle_loop(). Note that 'searching' and 'exit' should be already set.
 
-Thread::Thread(size_t n) : idx(n), stdThread(&Thread::idle_loop, this) {
-
+Thread::Thread(size_t n) : idx(n)
+#ifndef NO_THREADS
+    , stdThread(&Thread::idle_loop, this)
+#endif
+{
+#ifndef NO_THREADS
   wait_for_search_finished();
+#else
+  // In single-threaded builds (NO_THREADS), no native thread is created,
+  // so the idle_loop never runs. Set searching = false manually so that
+  // wait_for_search_finished() returns immediately.
+  searching = false;
+#endif
 }
 
 
@@ -50,8 +60,10 @@ Thread::~Thread() {
   assert(!searching);
 
   exit = true;
+#ifndef NO_THREADS
   start_searching();
   stdThread.join();
+#endif
 }
 
 
