@@ -31,6 +31,7 @@
 #include "search.h"
 #include "syzygy/tbprobe.h"
 #include "thread.h"
+#include "timeman.h"
 #include "tt.h"
 #include "uci.h"
 #include "piece.h"
@@ -163,9 +164,13 @@ public:
     // In single-threaded builds (WASM without pthreads), the idle_loop
     // thread does not run, so we must call search() directly and then
     // signal completion to unblock wait_for_search_finished().
-    // Use explicit non-virtual call to avoid WASM function table
-    // dispatch issues with virtual calls.
-    static_cast<MainThread*>(Threads.main())->MainThread::search();
+    // Call the iterative deepening search directly (non-virtual).
+    // Initialize time management (normally done in MainThread::search())
+    Color us = Threads.main()->rootPos.side_to_move();
+    Time.init(Threads.main()->rootPos, limits, us, Threads.main()->rootPos.game_ply());
+    TT.new_search();
+    Eval::NNUE::verify();
+    static_cast<Thread*>(Threads.main())->Thread::search();
     Threads.main()->finish_searching();
 
     // Wait for search to finish
