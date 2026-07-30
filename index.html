@@ -223,7 +223,7 @@
                         break;
 
                     case 'analysis':
-                        displayAnalysis(data, e.data.pvChinese, e.data);
+                        displayAnalysis(data);
                         // 更新箭头渲染
                         render();
                         break;
@@ -247,82 +247,65 @@
                     document.getElementById('analysisInfo').innerHTML = '<span class="engine-status">游戏已结束</span>';
                     document.getElementById('analysisPv').textContent = '';
                 }
+                render();
                 return;
             }
 
             // 初始局面 + moves 格式
-            const fen = INIT_FEN;
             const uciMoves = moveHistory.map(m => m.uci);
             analysisWorker.postMessage({
                 type: 'start',
-                data: { fen, moves: uciMoves }
+                data: { fen: INIT_FEN, moves: uciMoves }
             });
         }
 
-        function displayAnalysis(result, pvChinese, extra) {
+        function displayAnalysis(data) {
             const analysisInfo = document.getElementById('analysisInfo');
             const analysisPv = document.getElementById('analysisPv');
 
-            // 解析结果: "depth X score cp/mate Y nodes Z pv ..."
-            const parts = result.split(' ');
-            let depth = '', score = '', nodes = '', pvUci = '';
+            const { depth, score, scoreType, nodes, pv } = data;
 
-            for (let i = 0; i < parts.length; i++) {
-                if (parts[i] === 'depth' && i + 1 < parts.length) {
-                    depth = parts[++i];
-                } else if (parts[i] === 'score' && i + 1 < parts.length) {
-                    const type = parts[++i];
-                    const val = parts[++i];
-                    if (type === 'cp') {
-                        const cp = parseInt(val);
-                        if (cp > 0) score = '+' + (cp / 100).toFixed(2);
-                        else score = (cp / 100).toFixed(2);
-                    } else if (type === 'mate') {
-                        const mateVal = parseInt(val);
-                        score = '#' + Math.abs(mateVal);
-                    }
-                } else if (parts[i] === 'nodes' && i + 1 < parts.length) {
-                    nodes = parts[++i];
-                } else if (parts[i] === 'pv') {
-                    pvUci = parts.slice(i + 1).join(' ').trim();
-                    break;
-                }
+            // 构建分数显示
+            let scoreDisplay = '';
+            if (scoreType === 'cp') {
+                const cp = parseInt(score);
+                if (cp > 0) scoreDisplay = '+' + (cp / 100).toFixed(2);
+                else scoreDisplay = (cp / 100).toFixed(2);
+            } else if (scoreType === 'mate') {
+                const mateVal = parseInt(score);
+                scoreDisplay = '#' + Math.abs(mateVal);
             }
 
-            // 构建信息行（深度/合法走法/局面信息）
-            let infoHtml = '';
-            const legalMoves = extra?.legalMoves ?? '?';
-            const isCheck = extra?.isCheck;
-            const isGameOver = extra?.isGameOver;
-            let status = '';
-            if (isGameOver) {
-                status = ' &nbsp; 游戏结束';
-            } else if (isCheck) {
-                status = ' &nbsp; 将军!';
+            // 构建信息行
+            let infoHtml = `深度: ${depth}`;
+            if (scoreDisplay) {
+                const cls = scoreType === 'mate' ? 'mate' : 'score';
+                infoHtml += ` &nbsp; 分数: <span class="${cls}">${scoreDisplay}</span>`;
             }
-            if (score && score !== '0.00') {
-                infoHtml = `深度: ${depth} &nbsp; 分数: <span class="score">${score}</span> &nbsp; 招法: ${legalMoves}${status}`;
-            } else {
-                infoHtml = `深度: ${depth} &nbsp; 招法: ${legalMoves}${status}`;
+            if (nodes) {
+                const n = parseInt(nodes);
+                if (n >= 1000000) infoHtml += ` &nbsp; 节点: ${(n / 1000000).toFixed(1)}M`;
+                else if (n >= 1000) infoHtml += ` &nbsp; 节点: ${(n / 1000).toFixed(1)}K`;
+                else infoHtml += ` &nbsp; 节点: ${n}`;
             }
             analysisInfo.innerHTML = infoHtml;
 
-            // 思考路径（中文记谱 / 推荐走法）
-            if (pvChinese) {
-                analysisPv.textContent = '推荐: ' + pvChinese;
+            // 思考路径（中文记谱）
+            if (pv) {
+                const chinesePv = pvToChinese(pv);
+                analysisPv.textContent = '推荐: ' + chinesePv;
             } else {
                 analysisPv.textContent = '';
             }
 
             // 解析最佳招法用于箭头显示（PV 前两个 UCI 走法）
             engineArrows = [];
-            if (pvUci) {
-                const moves = pvUci.trim().split(/\s+/);
+            if (pv) {
+                const moves = pv.trim().split(/\s+/);
                 const turnColor = turn === 'w'; // 当前走子方是否是红方
                 for (let i = 0; i < Math.min(2, moves.length); i++) {
                     const parsed = parseUciMove(moves[i]);
                     if (parsed) {
-                        const piece = board[parsed.fromRow][parsed.fromCol];
                         const isRedMove = (i === 0) ? turnColor : !turnColor;
                         engineArrows.push({
                             fromRow: parsed.fromRow,
@@ -334,6 +317,25 @@
                     }
                 }
             }
+        }
+
+        // 将 UCI 走法序列转换为中文记谱
+        function pvToChinese(pvUci) {
+            if (!pvUci) return '';
+            const moves = pvUci.trim().split(/\s+/);
+            // 模拟走法以获取正确的中文记谱
+            let b = board.map(row => [...row]);
+            let t = turn;
+            const parts = [];
+            for (const uci of moves) {
+                const parsed = parseUciMove(uci);
+                if (!parsed) { parts.push(uci); continue; }
+                const chinese = toChineseNotation(b, parsed.fromRow, parsed.fromCol, parsed.toRow, parsed.toCol, t);
+                parts.push(chinese);
+                b = makeMove(b, parsed.fromRow, parsed.fromCol, parsed.toRow, parsed.toCol);
+                t = (t === 'w') ? 'b' : 'w';
+            }
+            return parts.join(' ');
         }
 
         // 生成 UCI 走法字符串
@@ -920,6 +922,7 @@
             }
 
             // 绘制引擎招法箭头（最佳招法 + 最佳应对）
+            // 红方走子用红色箭头，黑方走子用黑色箭头，从起点指向终点
             for (const arrow of engineArrows) {
                 const dFrom = getDisplay(arrow.fromRow, arrow.fromCol);
                 const dTo = getDisplay(arrow.toRow, arrow.toCol);
@@ -928,10 +931,10 @@
                 const x2 = dTo.col * cellSize + cellSize/2;
                 const y2 = dTo.row * cellSize + cellSize/2;
 
-                const arrowColor = arrow.isRed ? 'rgba(220,40,40,0.8)' : 'rgba(40,40,220,0.8)';
-                const arrowWidth = 5;
+                const arrowColor = arrow.isRed ? 'rgba(200,30,30,0.85)' : 'rgba(20,20,20,0.85)';
+                const arrowWidth = 6;
 
-                // 计算方向向量
+                // 计算方向向量（从起点到终点）
                 const dx = x2 - x1;
                 const dy = y2 - y1;
                 const len = Math.sqrt(dx*dx + dy*dy);
@@ -940,13 +943,13 @@
                     const ny = dy / len;
 
                     // 缩短起点和终点（避免被棋子遮挡）
-                    const shorten = pieceRadius + 4;
+                    const shorten = pieceRadius + 6;
                     const sx = x1 + nx * shorten;
                     const sy = y1 + ny * shorten;
                     const ex = x2 - nx * shorten;
                     const ey = y2 - ny * shorten;
 
-                    // 画线
+                    // 画线（从起点指向终点）
                     ctx.strokeStyle = arrowColor;
                     ctx.lineWidth = arrowWidth;
                     ctx.lineCap = 'round';
@@ -955,8 +958,8 @@
                     ctx.lineTo(ex, ey);
                     ctx.stroke();
 
-                    // 画箭头（三角形箭头）
-                    const arrowSize = 16;
+                    // 画箭头三角形（在终点处）
+                    const arrowSize = 18;
                     const angle = Math.atan2(ny, nx);
                     ctx.fillStyle = arrowColor;
                     ctx.beginPath();

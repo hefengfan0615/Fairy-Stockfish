@@ -1,7 +1,7 @@
 {
   "headers": [
     {
-      "source": "/ffish.wasm",
+      "source": "/(ffish|stockfish-web)\\.wasm",
       "headers": [
         { "key": "Content-Type", "value": "application/wasm" },
         { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
