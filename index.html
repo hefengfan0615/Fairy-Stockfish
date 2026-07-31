@@ -55,7 +55,7 @@
         }
         .info-panel {
             display: flex;
-            justify-content: space-between;
+            justify-content: center;
             align-items: center;
             margin-top: 18px;
             background: #c89a63;
@@ -65,32 +65,6 @@
             color: #2d1f0e;
             gap: 12px;
             flex-wrap: wrap;
-        }
-        .turn-indicator {
-            font-weight: 600;
-            font-size: 18px;
-            background: #2d2416;
-            color: #f0d5b0;
-            padding: 4px 18px;
-            border-radius: 30px;
-            letter-spacing: 1px;
-            white-space: nowrap;
-            box-shadow: inset 0 1px 4px #5f4a2e;
-        }
-        .move-history {
-            flex: 1.2;
-            min-width: 140px;
-            background: #f7ede0;
-            padding: 6px 14px;
-            border-radius: 30px;
-            font-size: 15px;
-            font-weight: 500;
-            color: #2d1f0e;
-            box-shadow: inset 0 1px 6px #b8894e;
-            text-align: center;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
         }
         .btn-group {
             display: flex;
@@ -139,15 +113,14 @@
             font-family: 'Courier New', 'PingFang SC', monospace;
             font-size: 14px;
             color: #2d1f0e;
-            height: 72px;
-            overflow: hidden;
+            min-height: 72px;
+            max-height: 300px;
+            overflow-y: auto;
         }
         .analysis-info {
             font-weight: 600;
             line-height: 1.6;
-            height: 22px;
-            overflow: hidden;
-            white-space: nowrap;
+            min-height: 22px;
         }
         .analysis-info .label {
             color: #4a3520;
@@ -160,12 +133,11 @@
         }
         .analysis-pv {
             margin-top: 4px;
-            line-height: 1.5;
-            height: 24px;
-            overflow: hidden;
-            white-space: nowrap;
-            text-overflow: ellipsis;
-            font-size: 15px;
+            line-height: 1.6;
+            min-height: 24px;
+            white-space: pre-wrap;
+            word-break: keep-all;
+            font-size: 14px;
         }
         .engine-status {
             font-size: 13px;
@@ -176,7 +148,6 @@
             .container { padding: 16px 12px 20px 12px; }
             canvas { width: 88vw; height: 88vw; max-width: 560px; max-height: 560px; }
             .info-panel { flex-direction: column; align-items: stretch; gap: 8px; }
-            .turn-indicator { text-align: center; }
             .btn-group { justify-content: center; }
         }
     </style>
@@ -188,8 +159,6 @@
             <canvas id="boardCanvas" width="700" height="700"></canvas>
         </div>
         <div class="info-panel">
-            <div class="turn-indicator" id="turnIndicator">红方走棋</div>
-            <div class="move-history" id="moveHistory">—</div>
             <div class="btn-group">
                 <button class="btn" id="undoBtn">悔棋</button>
                 <button class="btn" id="flipBtn">翻转</button>
@@ -280,7 +249,7 @@
             }
             lastAnalysisData = merged;
 
-            const { depth, score, scoreType, nodes, pv } = merged;
+            const { depth, score, scoreType, nodes, nps, time, pv } = merged;
 
             // 构建分数显示
             let scoreDisplay = '';
@@ -300,18 +269,24 @@
                 const cls = scoreType === 'mate' ? 'mate' : 'score';
                 infoHtml += (infoHtml ? ' &nbsp; ' : '') + `分数: <span class="${cls}">${scoreDisplay}</span>`;
             }
-            if (nodes) {
+            // 搜索速度：优先用 nps，否则用 nodes/time（单位 K）
+            let speedK = 0;
+            if (nps) {
+                speedK = Math.round(parseInt(nps) / 1000);
+            } else if (nodes && time) {
                 const n = parseInt(nodes);
-                if (n >= 1000000) infoHtml += (infoHtml ? ' &nbsp; ' : '') + `节点: ${(n / 1000000).toFixed(1)}M`;
-                else if (n >= 1000) infoHtml += (infoHtml ? ' &nbsp; ' : '') + `节点: ${(n / 1000).toFixed(1)}K`;
-                else infoHtml += (infoHtml ? ' &nbsp; ' : '') + `节点: ${n}`;
+                const t = parseInt(time);
+                if (t > 0) speedK = Math.round(n / t);
+            }
+            if (speedK > 0) {
+                infoHtml += (infoHtml ? ' &nbsp; ' : '') + `速度: ${speedK}K`;
             }
             analysisInfo.innerHTML = infoHtml || '<span class="engine-status">分析中...</span>';
 
-            // 思考路径（中文记谱）
+            // 思考路径（中文记谱，每招占一行，带编号）
             if (pv) {
                 const chinesePv = pvToChinese(pv);
-                analysisPv.textContent = '推荐: ' + chinesePv;
+                analysisPv.textContent = chinesePv;
             }
             // 注意：pv 为空时不覆盖，保留上次的显示
 
@@ -337,7 +312,7 @@
             // 注意：pv 为空时不更新箭头，保留上次的箭头
         }
 
-        // 将 UCI 走法序列转换为中文记谱
+        // 将 UCI 走法序列转换为中文记谱（每招一行，带编号）
         function pvToChinese(pvUci) {
             if (!pvUci) return '';
             const moves = pvUci.trim().split(/\s+/);
@@ -345,15 +320,17 @@
             let b = board.map(row => [...row]);
             let t = turn;
             const parts = [];
-            for (const uci of moves) {
+            for (let i = 0; i < moves.length; i++) {
+                const uci = moves[i];
                 const parsed = parseUciMove(uci);
                 if (!parsed) { parts.push(uci); continue; }
                 const chinese = toChineseNotation(b, parsed.fromRow, parsed.fromCol, parsed.toRow, parsed.toCol, t);
-                parts.push(chinese);
+                const num = String(i + 1).padStart(2, ' ');
+                parts.push(num + '. ' + chinese);
                 b = makeMove(b, parsed.fromRow, parsed.fromCol, parsed.toRow, parsed.toCol);
                 t = (t === 'w') ? 'b' : 'w';
             }
-            return parts.join(' ');
+            return parts.join('\n');
         }
 
         // 生成 UCI 走法字符串
@@ -405,8 +382,6 @@
 
         const canvas = document.getElementById('boardCanvas');
         const ctx = canvas.getContext('2d');
-        const turnIndicator = document.getElementById('turnIndicator');
-        const moveHistoryEl = document.getElementById('moveHistory');
         const statusMsg = document.getElementById('statusMsg');
 
         // ---------- 工具 ----------
@@ -738,7 +713,7 @@
                 gameOver = true;
                 statusMsg.textContent = '红方胜！ (吃将)';
                 sendPositionToWorker();
-                render(); updateInfo();
+                render();
                 return true;
             }
 
@@ -747,13 +722,13 @@
                 const winner = (turn === 'w') ? '黑方' : '红方';
                 statusMsg.textContent = winner + '胜！ (将死)';
                 sendPositionToWorker();
-                render(); updateInfo();
+                render();
                 return true;
             }
 
             statusMsg.textContent = isInCheck(board, turn) ? (turn==='w'?'红方':'黑方')+'被将军！' : (turn==='w'?'红方':'黑方')+'走棋';
             sendPositionToWorker();
-            render(); updateInfo();
+            render();
             return true;
         }
 
@@ -767,7 +742,7 @@
             selected = null; legalMoves = [];
             statusMsg.textContent = (turn==='w'?'红方':'黑方')+'走棋';
             sendPositionToWorker();
-            render(); updateInfo();
+            render();
         }
 
         function resetGame() {
@@ -779,13 +754,13 @@
             gameOver = false;
             statusMsg.textContent = '红方先行';
             sendPositionToWorker();
-            render(); updateInfo();
+            render();
         }
 
         function toggleFlip() {
             flipped = !flipped;
             selected = null; legalMoves = [];
-            render(); updateInfo();
+            render();
         }
 
         // ---------- 渲染 (支持翻转) ----------
@@ -1003,20 +978,6 @@
             ctx.strokeRect(cellSize/2-2, cellSize/2-2, W-cellSize+4, H-cellSize+4);
         }
 
-        function updateInfo() {
-            const turnName = turn === 'w' ? '红方' : '黑方';
-            turnIndicator.textContent = gameOver ? '已结束' : turnName + '走棋';
-            turnIndicator.style.background = turn === 'w' ? '#6d2a1a' : '#1a1a1a';
-            if (moveHistory.length > 0) {
-                const last = moveHistory[moveHistory.length-1];
-                const idx = moveHistory.length;
-                const label = (last.turn === 'w' ? '红' : '黑');
-                moveHistoryEl.textContent = `第${idx}手 ${label} ${last.chinese}`;
-            } else {
-                moveHistoryEl.textContent = '—';
-            }
-        }
-
         // ---------- 事件 ----------
         function handleCanvasClick(e) {
             if (gameOver) return;
@@ -1045,17 +1006,17 @@
                 if (isLegal) {
                     tryMove(selected.row, selected.col, actualRow, actualCol);
                     selected = null; legalMoves = [];
-                    render(); updateInfo();
+                    render();
                     return;
                 }
                 if (piece && ((turn==='w' && isRed(piece)) || (turn==='b' && isBlack(piece)))) {
                     selected = {row:actualRow, col:actualCol};
                     legalMoves = getLegalMovesFor(board, actualRow, actualCol, turn);
-                    render(); updateInfo();
+                    render();
                     return;
                 }
                 selected = null; legalMoves = [];
-                render(); updateInfo();
+                render();
                 return;
             }
 
@@ -1067,7 +1028,7 @@
                 } else {
                     selected = null; legalMoves = [];
                 }
-                render(); updateInfo();
+                render();
             }
         }
 
@@ -1081,15 +1042,15 @@
             });
             document.getElementById('undoBtn').addEventListener('click', () => {
                 undoMove();
-                render(); updateInfo();
+                render();
             });
             document.getElementById('flipBtn').addEventListener('click', () => {
                 toggleFlip();
-                render(); updateInfo();
+                render();
             });
             document.getElementById('resetBtn').addEventListener('click', () => {
                 resetGame();
-                render(); updateInfo();
+                render();
             });
             // 加载引擎 Worker（resetGame 内部会触发首次分析）
             initWorker();
