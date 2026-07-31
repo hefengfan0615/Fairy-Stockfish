@@ -28,6 +28,7 @@ ffish.js
 *.wasm
 !ffish.js
 !ffish.wasm
+!stockfish-web.wasm
 
 # pyffish
 venv
