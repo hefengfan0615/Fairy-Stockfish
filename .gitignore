@@ -16,6 +16,8 @@ src/-lstdc++.res
 **/*.nnue
 # Allow minixiangqi NNUE file to be tracked
 !/src/minixiangqi.nnue
+# Generated NNUE embedded header (build artifact)
+src/nnue_embedded.h
 
 
 # Build/test artifacts
@@ -28,6 +30,7 @@ ffish.js
 *.wasm
 !ffish.js
 !ffish.wasm
+!stockfish-web.js
 !stockfish-web.wasm
 
 # pyffish
