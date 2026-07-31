@@ -12,7 +12,11 @@ let pendingSearch = null;
 async function loadEngine() {
     try {
         // Dynamically import the engine module
-        const module = await import('./stockfish-web.js');
+        // Use ffish.js (not stockfish-web.js) because it matches the ffish.wasm binary.
+        // stockfish-web.js was built with USE_PTHREADS=1 and expects a different
+        // WASM import namespace ({env, wasi_snapshot_preview1}), while ffish.wasm
+        // was built with -DNO_THREADS and imports from module "a".
+        const module = await import('./ffish.js');
         const StockfishEngine = module.default;
 
         // Set up output handlers BEFORE module initialization
