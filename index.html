@@ -230,6 +230,7 @@
 
                     case 'error':
                         console.error('Worker 分析错误:', data);
+                        document.getElementById('analysisInfo').innerHTML = '<span class="engine-status">引擎错误: ' + data + '</span>';
                         break;
                 }
             };
