@@ -116,11 +116,16 @@
             min-height: 72px;
             max-height: 300px;
             overflow-y: auto;
+            width: 100%;
         }
         .analysis-info {
             font-weight: 600;
-            line-height: 1.6;
+            line-height: 1.4;
             min-height: 22px;
+            white-space: nowrap;
+            display: flex;
+            gap: 12px;
+            align-items: center;
         }
         .analysis-info .label {
             color: #4a3520;
@@ -133,11 +138,16 @@
         }
         .analysis-pv {
             margin-top: 4px;
-            line-height: 1.6;
+            line-height: 1.5;
             min-height: 24px;
-            white-space: pre-wrap;
-            word-break: keep-all;
             font-size: 14px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2px 8px;
+        }
+        .analysis-pv .move-item {
+            white-space: nowrap;
+            display: inline-block;
         }
         .engine-status {
             font-size: 13px;
@@ -149,6 +159,8 @@
             canvas { width: 88vw; height: 88vw; max-width: 560px; max-height: 560px; }
             .info-panel { flex-direction: column; align-items: stretch; gap: 8px; }
             .btn-group { justify-content: center; }
+            .analysis-info { font-size: 13px; gap: 6px; }
+            .analysis-pv { font-size: 13px; }
         }
     </style>
 </head>
@@ -194,7 +206,7 @@
                 switch (type) {
                     case 'ready':
                         document.getElementById('analysisInfo').innerHTML = '<span class="engine-status">引擎已就绪</span>';
-                        document.getElementById('analysisPv').textContent = '';
+                        document.getElementById('analysisPv').innerHTML = '';
                         // 初始分析
                         sendPositionToWorker();
                         break;
@@ -221,7 +233,7 @@
             if (!analysisWorker || gameOver) {
                 if (gameOver) {
                     document.getElementById('analysisInfo').innerHTML = '<span class="engine-status">游戏已结束</span>';
-                    document.getElementById('analysisPv').textContent = '';
+                    document.getElementById('analysisPv').innerHTML = '';
                 }
                 render();
                 return;
@@ -283,10 +295,10 @@
             }
             analysisInfo.innerHTML = infoHtml || '<span class="engine-status">分析中...</span>';
 
-            // 思考路径（中文记谱，每招占一行，带编号）
+            // 思考路径（中文记谱，横排，每招不换行）
             if (pv) {
                 const chinesePv = pvToChinese(pv);
-                analysisPv.textContent = chinesePv;
+                analysisPv.innerHTML = chinesePv;
             }
             // 注意：pv 为空时不覆盖，保留上次的显示
 
@@ -312,25 +324,24 @@
             // 注意：pv 为空时不更新箭头，保留上次的箭头
         }
 
-        // 将 UCI 走法序列转换为中文记谱（每招一行，带编号）
+        // 将 UCI 走法序列转换为中文记谱（横排，每招用 span 包裹不换行）
         function pvToChinese(pvUci) {
             if (!pvUci) return '';
             const moves = pvUci.trim().split(/\s+/);
-            // 模拟走法以获取正确的中文记谱
             let b = board.map(row => [...row]);
             let t = turn;
             const parts = [];
             for (let i = 0; i < moves.length; i++) {
                 const uci = moves[i];
                 const parsed = parseUciMove(uci);
-                if (!parsed) { parts.push(uci); continue; }
+                if (!parsed) { parts.push('<span class="move-item">' + uci + '</span>'); continue; }
                 const chinese = toChineseNotation(b, parsed.fromRow, parsed.fromCol, parsed.toRow, parsed.toCol, t);
-                const num = String(i + 1).padStart(2, ' ');
-                parts.push(num + '. ' + chinese);
+                const num = String(i + 1).padStart(2, '\u00A0');
+                parts.push('<span class="move-item">' + num + '. ' + chinese + '</span>');
                 b = makeMove(b, parsed.fromRow, parsed.fromCol, parsed.toRow, parsed.toCol);
                 t = (t === 'w') ? 'b' : 'w';
             }
-            return parts.join('\n');
+            return parts.join('');
         }
 
         // 生成 UCI 走法字符串
@@ -379,6 +390,7 @@
         let flipped = false;
         let engineArrows = []; // [{ fromRow, fromCol, toRow, toCol, isRed }, ...]
         let lastAnalysisData = {}; // 缓存引擎最后一次分析数据，增量更新
+        let lastMove = null; // { fromRow, fromCol, toRow, toCol } 上一步走法
 
         const canvas = document.getElementById('boardCanvas');
         const ctx = canvas.getContext('2d');
@@ -706,6 +718,7 @@
                 to: {row:toRow, col:toCol},
                 piece, captured, fen: fenBefore, chinese, turn, uci
             });
+            lastMove = { fromRow, fromCol, toRow, toCol };
 
             turn = nextTurn;
 
@@ -740,6 +753,13 @@
             turn = last.turn;
             gameOver = false;
             selected = null; legalMoves = [];
+            // 恢复上一步为倒数第二个走法，或清空
+            if (moveHistory.length > 0) {
+                const prev = moveHistory[moveHistory.length - 1];
+                lastMove = { fromRow: prev.from.row, fromCol: prev.from.col, toRow: prev.to.row, toCol: prev.to.col };
+            } else {
+                lastMove = null;
+            }
             statusMsg.textContent = (turn==='w'?'红方':'黑方')+'走棋';
             sendPositionToWorker();
             render();
@@ -752,6 +772,7 @@
             moveHistory = [];
             selected = null; legalMoves = [];
             gameOver = false;
+            lastMove = null;
             statusMsg.textContent = '红方先行';
             sendPositionToWorker();
             render();
@@ -889,8 +910,11 @@
                     if (isSelected) {
                         ctx.strokeStyle = '#ffdd44';
                         ctx.lineWidth = 3.5;
+                        const bx = x - pieceRadius - 4;
+                        const by = y - pieceRadius - 4;
+                        const bs = (pieceRadius + 4) * 2;
                         ctx.beginPath();
-                        ctx.arc(x, y, pieceRadius+5, 0, Math.PI*2);
+                        ctx.rect(bx, by, bs, bs);
                         ctx.stroke();
                     }
                 }
@@ -911,6 +935,28 @@
                     ctx.lineWidth = 4;
                     ctx.beginPath();
                     ctx.arc(x, y, pieceRadius+4, 0, Math.PI*2);
+                    ctx.stroke();
+                }
+            }
+
+            // 绘制上一步走法框（起止格）
+            if (lastMove) {
+                const lmFrom = getDisplay(lastMove.fromRow, lastMove.fromCol);
+                const lmTo = getDisplay(lastMove.toRow, lastMove.toCol);
+                const positions = [
+                    { row: lmFrom.row, col: lmFrom.col },
+                    { row: lmTo.row, col: lmTo.col }
+                ];
+                for (const pos of positions) {
+                    const lx = pos.col * cellSize + cellSize/2;
+                    const ly = pos.row * cellSize + cellSize/2;
+                    ctx.strokeStyle = '#ff6600';
+                    ctx.lineWidth = 3.5;
+                    const bx = lx - pieceRadius - 4;
+                    const by = ly - pieceRadius - 4;
+                    const bs = (pieceRadius + 4) * 2;
+                    ctx.beginPath();
+                    ctx.rect(bx, by, bs, bs);
                     ctx.stroke();
                 }
             }
