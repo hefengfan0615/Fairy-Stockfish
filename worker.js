@@ -5,6 +5,7 @@
 let engine = null;
 let engineReady = false;
 let isSearching = false;
+let stopPending = false;
 let lastInfoData = null;
 let pendingSearch = null;
 
@@ -37,6 +38,7 @@ async function loadEngine() {
                     }
                 } else if (line.startsWith('bestmove')) {
                     isSearching = false;
+                    stopPending = false;
                     if (lastInfoData) {
                         self.postMessage({
                             type: 'analysis',
@@ -134,9 +136,12 @@ function parseInfoLine(line) {
 }
 
 function doSearch(fen, moves) {
-    // Stop current search if running
+    // Stop current search if running (only send stop once)
     if (isSearching) {
-        sendCommand('stop');
+        if (!stopPending) {
+            sendCommand('stop');
+            stopPending = true;
+        }
         // Queue this search to run after bestmove
         pendingSearch = { fen, moves };
         return;
@@ -149,6 +154,7 @@ function doSearch(fen, moves) {
     // Start search
     lastInfoData = null;
     isSearching = true;
+    stopPending = false;
     sendCommand('go depth 20');
 }
 

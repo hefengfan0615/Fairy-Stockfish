@@ -264,7 +264,17 @@
             const analysisInfo = document.getElementById('analysisInfo');
             const analysisPv = document.getElementById('analysisPv');
 
-            const { depth, score, scoreType, nodes, pv } = data;
+            // 增量合并：新数据覆盖旧数据中存在的字段，未出现的字段保留上次的值
+            const merged = { ...lastAnalysisData };
+            const fields = ['depth', 'seldepth', 'score', 'scoreType', 'nodes', 'nps', 'time', 'pv'];
+            for (const f of fields) {
+                if (data[f] !== undefined && data[f] !== '') {
+                    merged[f] = data[f];
+                }
+            }
+            lastAnalysisData = merged;
+
+            const { depth, score, scoreType, nodes, pv } = merged;
 
             // 构建分数显示
             let scoreDisplay = '';
@@ -278,30 +288,30 @@
             }
 
             // 构建信息行
-            let infoHtml = `深度: ${depth}`;
+            let infoHtml = '';
+            if (depth) infoHtml += `深度: ${depth}`;
             if (scoreDisplay) {
                 const cls = scoreType === 'mate' ? 'mate' : 'score';
-                infoHtml += ` &nbsp; 分数: <span class="${cls}">${scoreDisplay}</span>`;
+                infoHtml += (infoHtml ? ' &nbsp; ' : '') + `分数: <span class="${cls}">${scoreDisplay}</span>`;
             }
             if (nodes) {
                 const n = parseInt(nodes);
-                if (n >= 1000000) infoHtml += ` &nbsp; 节点: ${(n / 1000000).toFixed(1)}M`;
-                else if (n >= 1000) infoHtml += ` &nbsp; 节点: ${(n / 1000).toFixed(1)}K`;
-                else infoHtml += ` &nbsp; 节点: ${n}`;
+                if (n >= 1000000) infoHtml += (infoHtml ? ' &nbsp; ' : '') + `节点: ${(n / 1000000).toFixed(1)}M`;
+                else if (n >= 1000) infoHtml += (infoHtml ? ' &nbsp; ' : '') + `节点: ${(n / 1000).toFixed(1)}K`;
+                else infoHtml += (infoHtml ? ' &nbsp; ' : '') + `节点: ${n}`;
             }
-            analysisInfo.innerHTML = infoHtml;
+            analysisInfo.innerHTML = infoHtml || '<span class="engine-status">分析中...</span>';
 
             // 思考路径（中文记谱）
             if (pv) {
                 const chinesePv = pvToChinese(pv);
                 analysisPv.textContent = '推荐: ' + chinesePv;
-            } else {
-                analysisPv.textContent = '';
             }
+            // 注意：pv 为空时不覆盖，保留上次的显示
 
             // 解析最佳招法用于箭头显示（PV 前两个 UCI 走法）
-            engineArrows = [];
             if (pv) {
+                engineArrows = [];
                 const moves = pv.trim().split(/\s+/);
                 const turnColor = turn === 'w'; // 当前走子方是否是红方
                 for (let i = 0; i < Math.min(2, moves.length); i++) {
@@ -318,6 +328,7 @@
                     }
                 }
             }
+            // 注意：pv 为空时不更新箭头，保留上次的箭头
         }
 
         // 将 UCI 走法序列转换为中文记谱
@@ -384,6 +395,7 @@
         let gameOver = false;
         let flipped = false;
         let engineArrows = []; // [{ fromRow, fromCol, toRow, toCol, isRed }, ...]
+        let lastAnalysisData = {}; // 缓存引擎最后一次分析数据，增量更新
 
         const canvas = document.getElementById('boardCanvas');
         const ctx = canvas.getContext('2d');
@@ -943,14 +955,16 @@
                     const nx = dx / len;
                     const ny = dy / len;
 
-                    // 缩短起点和终点（避免被棋子遮挡）
-                    const shorten = pieceRadius + 6;
-                    const sx = x1 + nx * shorten;
-                    const sy = y1 + ny * shorten;
-                    const ex = x2 - nx * shorten;
-                    const ey = y2 - ny * shorten;
+                    // 起点从棋子边缘出发
+                    const startOffset = pieceRadius + 4;
+                    const sx = x1 + nx * startOffset;
+                    const sy = y1 + ny * startOffset;
 
-                    // 画线（从起点指向终点）
+                    // 终点画到目标格中心，箭头尖在目标格中心
+                    const ex = x2;
+                    const ey = y2;
+
+                    // 画线（从起点边缘指向终点中心）
                     ctx.strokeStyle = arrowColor;
                     ctx.lineWidth = arrowWidth;
                     ctx.lineCap = 'round';
@@ -959,8 +973,8 @@
                     ctx.lineTo(ex, ey);
                     ctx.stroke();
 
-                    // 画箭头三角形（在终点处）
-                    const arrowSize = 18;
+                    // 画箭头三角形（箭头尖在目标格中心）
+                    const arrowSize = 20;
                     const angle = Math.atan2(ny, nx);
                     ctx.fillStyle = arrowColor;
                     ctx.beginPath();
