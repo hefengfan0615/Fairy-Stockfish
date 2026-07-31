@@ -212,7 +212,8 @@
 
                     case 'analysis':
                         displayAnalysis(data);
-                        render();
+                        // 动画期间不重绘，避免干扰动画
+                        if (!animState) render();
                         break;
 
                     case 'error':
@@ -421,6 +422,8 @@
         let engineArrows = []; // [{ fromRow, fromCol, toRow, toCol, isRed }, ...]
         let lastAnalysisData = {}; // 缓存引擎最后一次分析数据，增量更新
         let lastMove = null; // { fromRow, fromCol, toRow, toCol } 上一步走法
+        let animState = null; // { piece, fromRow, fromCol, toRow, toCol, step, maxSteps, callback } 走棋动画
+        let busy = false; // 动画进行中或引擎计算中，禁止点击
 
         const canvas = document.getElementById('boardCanvas');
         const ctx = canvas.getContext('2d');
@@ -692,6 +695,7 @@
             let direction = '', targetStr = '';
 
             if (fromCol === toCol) {
+                // 直线移动：进或退
                 const delta = toRow - fromRow;
                 const forward = isRedSide ? -1 : 1;
                 if (delta * forward > 0) {
@@ -701,32 +705,46 @@
                     direction = '退';
                     targetStr = isRedSide ? CN_DIGITS[Math.abs(delta)] : Math.abs(delta).toString();
                 } else {
+                    // delta为0不应该发生，但保底
                     direction = '平';
                     targetStr = isRedSide ? CN_DIGITS[toFileIdx + 1] : BLACK_DIGITS[toFileIdx + 1];
                 }
             } else {
+                // 横向移动：平
                 direction = '平';
                 targetStr = isRedSide ? CN_DIGITS[toFileIdx + 1] : BLACK_DIGITS[toFileIdx + 1];
             }
 
-            let prefix = '';
+            // 同列多子前缀：前/中/后 或 前/二/三/.../后
             const samePieces = [];
-            for (let r=0; r<SIZE; r++) {
-                if (b[r][fromCol] === piece && r !== fromRow) samePieces.push(r);
+            for (let r = 0; r < SIZE; r++) {
+                if (b[r][fromCol] === piece) samePieces.push(r);
             }
-            if (samePieces.length > 0) {
-                const sorted = samePieces.sort((a,b) => isRedSide ? a-b : b-a);
-                const frontRow = isRedSide ? Math.min(...sorted) : Math.max(...sorted);
-                const isFront = isRedSide ? (fromRow < frontRow) : (fromRow > frontRow);
-                prefix = isFront ? '前' : '后';
-                return prefix + name + direction + targetStr;
+            const count = samePieces.length;
+            if (count > 1) {
+                // 按红方/黑方视角排序（红方从下往上，黑方从上往下）
+                samePieces.sort((a, b) => isRedSide ? a - b : b - a);
+                const pos = samePieces.indexOf(fromRow);
+                if (count === 2) {
+                    return (pos === 0 ? '前' : '后') + name + direction + targetStr;
+                } else if (count === 3) {
+                    return (pos === 0 ? '前' : pos === 1 ? '中' : '后') + name + direction + targetStr;
+                } else {
+                    // 4个及以上：前、二、三、...、后
+                    if (pos === 0) return '前' + name + direction + targetStr;
+                    if (pos === count - 1) return '后' + name + direction + targetStr;
+                    // 中间用数字，从"二"开始
+                    return (isRedSide ? CN_DIGITS[pos + 1] : (pos + 1).toString()) + name + direction + targetStr;
+                }
             }
             return name + fileStr + direction + targetStr;
         }
 
         // ---------- 核心操作 ----------
+        const ANIM_STEPS = 8;
+
         function tryMove(fromRow, fromCol, toRow, toCol) {
-            if (gameOver) return false;
+            if (gameOver || busy) return false;
             const piece = board[fromRow][fromCol];
             if (!piece) return false;
             const color = isRed(piece) ? 'w' : 'b';
@@ -740,6 +758,7 @@
             const fenBefore = generateFEN(board, turn);
             const uci = toUciMove(fromRow, fromCol, toRow, toCol);
 
+            // 先更新棋盘状态
             board = makeMove(board, fromRow, fromCol, toRow, toCol);
             const nextTurn = (turn === 'w') ? 'b' : 'w';
 
@@ -749,34 +768,55 @@
                 piece, captured, fen: fenBefore, chinese, turn, uci
             });
             lastMove = { fromRow, fromCol, toRow, toCol };
-
             turn = nextTurn;
+            selected = null; legalMoves = [];
+            busy = true;
 
-            if (captured === 'K' || captured === 'k') {
-                gameOver = true;
-                statusMsg.textContent = '红方胜！ (吃将)';
-                sendPositionToWorker();
-                render();
-                return true;
-            }
+            // 启动走棋动画
+            // 动画期间：from格和to格都暂时清空，由动画绘制滑动的棋子
+            board[fromRow][fromCol] = 0;
+            board[toRow][toCol] = 0;
+            animState = {
+                piece, fromRow, fromCol, toRow, toCol,
+                step: ANIM_STEPS,
+                maxSteps: ANIM_STEPS,
+                callback: function() {
+                    animState = null;
+                    busy = false;
+                    // 动画结束，棋子落到目标格
+                    board[toRow][toCol] = piece;
+                    if (captured === 'K' || captured === 'k') {
+                        gameOver = true;
+                        statusMsg.textContent = '红方胜！ (吃将)';
+                    } else if (checkGameOver(board, turn)) {
+                        gameOver = true;
+                        const winner = (turn === 'w') ? '黑方' : '红方';
+                        statusMsg.textContent = winner + '胜！ (将死)';
+                    } else {
+                        statusMsg.textContent = isInCheck(board, turn) ? (turn==='w'?'红方':'黑方')+'被将军！' : (turn==='w'?'红方':'黑方')+'走棋';
+                    }
+                    sendPositionToWorker();
+                    render();
+                }
+            };
 
-            if (checkGameOver(board, turn)) {
-                gameOver = true;
-                const winner = (turn === 'w') ? '黑方' : '红方';
-                statusMsg.textContent = winner + '胜！ (将死)';
-                sendPositionToWorker();
-                render();
-                return true;
-            }
-
-            statusMsg.textContent = isInCheck(board, turn) ? (turn==='w'?'红方':'黑方')+'被将军！' : (turn==='w'?'红方':'黑方')+'走棋';
-            sendPositionToWorker();
-            render();
+            animateStep();
             return true;
         }
 
+        function animateStep() {
+            if (!animState) return;
+            animState.step--;
+            render();
+            if (animState.step <= 0) {
+                animState.callback();
+            } else {
+                requestAnimationFrame(animateStep);
+            }
+        }
+
         function undoMove() {
-            if (moveHistory.length === 0) return;
+            if (moveHistory.length === 0 || busy) return;
             const last = moveHistory.pop();
             board[last.from.row][last.from.col] = last.piece;
             board[last.to.row][last.to.col] = last.captured || 0;
@@ -803,6 +843,10 @@
             selected = null; legalMoves = [];
             gameOver = false;
             lastMove = null;
+            animState = null;
+            busy = false;
+            lastAnalysisData = {};
+            engineArrows = [];
             statusMsg.textContent = '红方先行';
             sendPositionToWorker();
             render();
@@ -874,6 +918,31 @@
                 if (!flipped) return {row:r, col:c};
                 return {row: SIZE-1-r, col: SIZE-1-c};
             };
+
+            // 棋盘外边框（在棋子之前绘制，避免覆盖边缘棋子）
+            ctx.strokeStyle = '#6a4e2e';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(cellSize/2-2, cellSize/2-2, W-cellSize+4, H-cellSize+4);
+
+            // 绘制动画中的棋子
+            if (animState) {
+                const a = animState;
+                const progress = (a.maxSteps - a.step) / a.maxSteps;
+                const dFrom = getDisplay(a.fromRow, a.fromCol);
+                const dTo = getDisplay(a.toRow, a.toCol);
+                const fx = dFrom.col * cellSize + cellSize/2;
+                const fy = dFrom.row * cellSize + cellSize/2;
+                const tx = dTo.col * cellSize + cellSize/2;
+                const ty = dTo.row * cellSize + cellSize/2;
+                const ax = fx + (tx - fx) * progress;
+                const ay = fy + (ty - fy) * progress;
+                const imgName = PIECE_IMG[a.piece];
+                const img = pieceImages[imgName];
+                if (img && img.complete && img.naturalWidth > 0) {
+                    const imgSize = cellSize * 0.92;
+                    ctx.drawImage(img, ax - imgSize/2, ay - imgSize/2, imgSize, imgSize);
+                }
+            }
 
             for (let r=0; r<SIZE; r++) {
                 for (let c=0; c<SIZE; c++) {
@@ -992,15 +1061,11 @@
                     ctx.fill();
                 }
             }
-
-            ctx.strokeStyle = '#6a4e2e';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(cellSize/2-2, cellSize/2-2, W-cellSize+4, H-cellSize+4);
         }
 
         // ---------- 事件 ----------
         function handleCanvasClick(e) {
-            if (gameOver) return;
+            if (gameOver || busy) return;
             const rect = canvas.getBoundingClientRect();
             const scaleX = canvas.width / rect.width;
             const scaleY = canvas.height / rect.height;
@@ -1025,8 +1090,6 @@
                 const isLegal = legalMoves.some(m => m.row === actualRow && m.col === actualCol);
                 if (isLegal) {
                     tryMove(selected.row, selected.col, actualRow, actualCol);
-                    selected = null; legalMoves = [];
-                    render();
                     return;
                 }
                 if (piece && ((turn==='w' && isRed(piece)) || (turn==='b' && isBlack(piece)))) {
