@@ -62,6 +62,7 @@ jobs:
       - name: Build UCI WASM engine for Node.js test
         run: |
           emcc -o stockfish-test.js -s WASM=1 -s ENVIRONMENT=node -s NODERAWFS=1 \
+            -s USE_PTHREADS=1 -s PTHREAD_POOL_SIZE=2 -s EXIT_RUNTIME=0 \
             -s MODULARIZE=1 -s EXPORT_NAME='StockfishTest' \
             -s EXPORTED_FUNCTIONS='["_main","_command","_isReady"]' \
             -s EXPORTED_RUNTIME_METHODS='["ccall"]' \
