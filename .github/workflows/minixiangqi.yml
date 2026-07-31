@@ -39,11 +39,11 @@ jobs:
           version: ${{env.EM_VERSION}}
           actions-cache-folder: ${{env.EM_CACHE_FOLDER}}
 
-      - name: Build UCI WASM engine for Browser/Worker
+      - name: Build UCI WASM engine (Browser/Worker + Node.js test)
         run: |
-          emcc -o stockfish-web.js -s WASM=1 -s ENVIRONMENT='web,worker' \
+          emcc -o stockfish-web.js -s WASM=1 -s ENVIRONMENT='web,worker,node' \
             -s USE_PTHREADS=1 -s PTHREAD_POOL_SIZE=2 -s EXIT_RUNTIME=0 \
-            -s MODULARIZE=1 -s EXPORT_ES6=1 -s USE_ES6_IMPORT_META=0 \
+            -s MODULARIZE=1 -s EXPORT_ES6=1 -s USE_ES6_IMPORT_META=1 \
             -s EXPORT_NAME='StockfishEngine' \
             -s EXPORTED_FUNCTIONS='["_main","_command","_isReady"]' \
             -s EXPORTED_RUNTIME_METHODS='["ccall"]' \
@@ -59,120 +59,100 @@ jobs:
             nnue/features/half_ka_v2_variants.cpp \
             -I. -Isyzygy -Innue -Innue/features
 
-      - name: Build UCI WASM engine for Node.js test
+      - name: Copy browser engine files to web root
         run: |
-          emcc -o stockfish-test.js -s WASM=1 -s ENVIRONMENT=node -s NODERAWFS=1 \
-            -s USE_PTHREADS=1 -s PTHREAD_POOL_SIZE=2 -s EXIT_RUNTIME=0 \
-            -s MODULARIZE=1 -s EXPORT_NAME='StockfishTest' \
-            -s EXPORTED_FUNCTIONS='["_main","_command","_isReady"]' \
-            -s EXPORTED_RUNTIME_METHODS='["ccall"]' \
-            -s INITIAL_MEMORY=64MB -s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=1GB \
-            -DNDEBUG -DNNUE_EMBEDDING_OFF \
-            -DLARGEBOARDS -DPRECOMPUTED_MAGICS -DALLVARS \
-            -std=c++17 -O2 \
-            benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp main.cpp \
-            material.cpp misc.cpp movegen.cpp movepick.cpp pawns.cpp position.cpp psqt.cpp \
-            search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
-            nnue/evaluate_nnue.cpp nnue/features/half_ka_v2.cpp \
-            partner.cpp parser.cpp piece.cpp variant.cpp xboard.cpp \
-            nnue/features/half_ka_v2_variants.cpp \
-            -I. -Isyzygy -Innue -Innue/features
+          cp stockfish-web.js ../stockfish-web.js
+          cp stockfish-web.wasm ../stockfish-web.wasm
+          cp stockfish-web.worker.js ../stockfish-web.worker.js 2>/dev/null || true
 
       - name: Test minixiangqi go depth 20
         run: |
           rm -f /tmp/test_pass /tmp/test_fail
-          cat > test_engine.js << 'JSEOF'
-          const fs = require('fs');
+          cat > test_engine.mjs << 'JSEOF'
+          import fs from 'fs';
 
           let output = '';
           let gotBestmove = false;
 
-          const StockfishTest = require('./stockfish-test.js');
-          StockfishTest({
+          import('./stockfish-web.js').then(async (module) => {
+            const StockfishEngine = module.default;
+            const engine = await StockfishEngine({
               print: (line) => {
-                  output += line + '\n';
-                  process.stdout.write('[engine] ' + line + '\n');
-                  if (line.includes('bestmove')) {
-                      gotBestmove = true;
-                      console.error('[test] Got bestmove!');
-                      if (output.includes('info depth')) {
-                          console.error('TEST PASSED');
-                          fs.writeFileSync('/tmp/test_pass', '1');
-                      } else {
-                          console.error('ERROR: No info depth lines found!');
-                          fs.writeFileSync('/tmp/test_fail', '1');
-                      }
+                output += line + '\n';
+                process.stdout.write('[engine] ' + line + '\n');
+                if (line.includes('bestmove')) {
+                  gotBestmove = true;
+                  console.error('[test] Got bestmove!');
+                  if (output.includes('info depth')) {
+                    console.error('TEST PASSED');
+                    fs.writeFileSync('/tmp/test_pass', '1');
+                  } else {
+                    console.error('ERROR: No info depth lines found!');
+                    fs.writeFileSync('/tmp/test_fail', '1');
                   }
+                  process.exit(0);
+                }
               },
               printErr: (line) => {
-                  process.stderr.write('[stderr] ' + line + '\n');
+                process.stderr.write('[stderr] ' + line + '\n');
               }
-          }).then(engine => {
-              function waitForReady() {
-                  return new Promise((resolve, reject) => {
-                      let attempts = 0;
-                      const maxAttempts = 200;
-                      function check() {
-                          attempts++;
-                          if (engine._isReady && engine._isReady()) {
-                              resolve();
-                          } else if (attempts >= maxAttempts) {
-                              reject(new Error('Engine initialization timed out'));
-                          } else {
-                              setTimeout(check, 50);
-                          }
-                      }
-                      check();
-                  });
+            });
+
+            await new Promise((resolve, reject) => {
+              let attempts = 0;
+              const maxAttempts = 200;
+              function check() {
+                attempts++;
+                if (engine._isReady && engine._isReady()) {
+                  resolve();
+                } else if (attempts >= maxAttempts) {
+                  reject(new Error('Engine initialization timed out'));
+                } else {
+                  setTimeout(check, 50);
+                }
               }
+              check();
+            });
+            console.error('[test] Engine is ready');
 
-              return waitForReady().then(() => {
-                  console.error('[test] Engine is ready');
+            const commands = [
+              'uci',
+              'setoption name UCI_Variant value minixiangqi',
+              'setoption name Use NNUE value true',
+              'setoption name EvalFile value minixiangqi.nnue',
+              'isready',
+              'position startpos',
+              'go depth 20'
+            ];
 
-                  const commands = [
-                      'uci',
-                      'setoption name UCI_Variant value minixiangqi',
-                      'setoption name Use NNUE value true',
-                      'setoption name EvalFile value minixiangqi.nnue',
-                      'isready',
-                      'position startpos',
-                      'go depth 20'
-                  ];
+            function sendCommand(cmd) {
+              engine.ccall('command', null, ['string'], [cmd]);
+            }
 
-                  function sendCommand(cmd) {
-                      engine.ccall('command', null, ['string'], [cmd]);
-                  }
+            for (let i = 0; i < commands.length; i++) {
+              console.error('[test] Sending: ' + commands[i]);
+              sendCommand(commands[i]);
+              console.error('[test] Sent: ' + commands[i]);
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
 
-                  let i = 0;
-                  function sendNext() {
-                      if (i < commands.length) {
-                          console.error('[test] Sending: ' + commands[i]);
-                          sendCommand(commands[i]);
-                          console.error('[test] Sent: ' + commands[i]);
-                          i++;
-                          setTimeout(sendNext, 500);
-                      } else {
-                          console.error('[test] All commands sent, waiting for bestmove...');
-                      }
-                  }
-
-                  setTimeout(sendNext, 500);
-              });
+            console.error('[test] All commands sent, waiting for bestmove...');
           }).catch(err => {
-              console.error('ERROR: Module initialization failed:', err);
-              fs.writeFileSync('/tmp/test_fail', '1');
+            console.error('ERROR: Module initialization failed:', err);
+            fs.writeFileSync('/tmp/test_fail', '1');
+            process.exit(1);
           });
 
-          // Safety timeout
           setTimeout(() => {
-              if (!gotBestmove) {
-                  console.error('ERROR: Timeout waiting for bestmove. Output so far:');
-                  console.error(output);
-                  fs.writeFileSync('/tmp/test_fail', '1');
-              }
+            if (!gotBestmove) {
+              console.error('ERROR: Timeout waiting for bestmove. Output so far:');
+              console.error(output);
+              fs.writeFileSync('/tmp/test_fail', '1');
+              process.exit(1);
+            }
           }, 120000);
           JSEOF
-          timeout 180 node test_engine.js 2>&1 || true
+          timeout 180 node test_engine.mjs 2>&1 || true
           if [ -f /tmp/test_pass ]; then
             echo "TEST PASSED"
             exit 0
@@ -180,12 +160,6 @@ jobs:
             echo "TEST FAILED"
             exit 1
           fi
-
-      - name: Copy browser engine files to web root
-        run: |
-          cp stockfish-web.js ../stockfish-web.js
-          cp stockfish-web.wasm ../stockfish-web.wasm
-          cp stockfish-web.worker.js ../stockfish-web.worker.js 2>/dev/null || true
 
       - name: Commit WASM files to repo for Vercel deployment
         run: |
