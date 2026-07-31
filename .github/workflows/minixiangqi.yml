@@ -42,10 +42,10 @@ jobs:
       - name: Generate NNUE embedded header (WASM can't use INCBIN asm)
         run: |
           xxd -i minixiangqi.nnue | sed \
+            -e 's/minixiangqi_nnue_len/gEmbeddedNNUESize/g' \
+            -e 's/minixiangqi_nnue/gEmbeddedNNUEData/g' \
             -e 's/unsigned char/const unsigned char/g' \
             -e 's/unsigned int/const unsigned int/g' \
-            -e 's/minixiangqi_nnue/gEmbeddedNNUEData/g' \
-            -e 's/minixiangqi_nnue_len/gEmbeddedNNUESize/g' \
             > nnue_embedded.h
 
       - name: Build UCI WASM engine for Browser/Worker
