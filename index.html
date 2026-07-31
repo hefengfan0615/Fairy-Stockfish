@@ -113,9 +113,8 @@
             font-family: 'Courier New', 'PingFang SC', monospace;
             font-size: 14px;
             color: #2d1f0e;
-            min-height: 72px;
-            max-height: 300px;
-            overflow-y: auto;
+            height: 90px;
+            overflow: hidden;
             width: 100%;
         }
         .analysis-info {
@@ -375,6 +374,37 @@
             'C': '炮', 'c': '砲',
             'P': '兵', 'p': '卒'
         };
+
+        // 棋子图片映射 (xqwlight 风格)
+        const PIECE_IMG = {
+            'K': 'rk', 'k': 'bk',
+            'R': 'rr', 'r': 'br',
+            'N': 'rn', 'n': 'bn',
+            'H': 'rn', 'h': 'bn',
+            'C': 'rc', 'c': 'bc',
+            'P': 'rp', 'p': 'bp'
+        };
+
+        // 预加载所有棋子图片和选中框图片
+        const pieceImages = {};
+        const IMG_DIR = 'images/';
+        let imgsLoaded = 0;
+        let imgsTotal = 0;
+        const IMG_NAMES = ['rk','rr','rn','rc','rp','bk','br','bn','bc','bp','oos'];
+        function loadImages(callback) {
+            imgsTotal = IMG_NAMES.length;
+            for (const name of IMG_NAMES) {
+                const img = new Image();
+                img.onload = img.onerror = function() {
+                    imgsLoaded++;
+                    if (imgsLoaded >= imgsTotal) {
+                        callback();
+                    }
+                };
+                img.src = IMG_DIR + name + '.gif';
+                pieceImages[name] = img;
+            }
+        }
 
         const CN_DIGITS = ['零','一','二','三','四','五','六','七'];
         const BLACK_DIGITS = ['0','1','2','3','4','5','6','7'];
@@ -852,70 +882,20 @@
                     const d = getDisplay(r,c);
                     const x = d.col * cellSize + cellSize/2;
                     const y = d.row * cellSize + cellSize/2;
-                    const isRedSide = isRed(p);
                     const isSelected = selected && selected.row === r && selected.col === c;
 
-                    ctx.shadowColor = 'rgba(0,0,0,0.25)';
-                    ctx.shadowBlur = 6;
-                    ctx.shadowOffsetX = 2;
-                    ctx.shadowOffsetY = 3;
-
-                    const grad2 = ctx.createRadialGradient(x-6, y-6, 4, x, y, pieceRadius+4);
-                    if (isRedSide) {
-                        grad2.addColorStop(0, '#f5d6c0');
-                        grad2.addColorStop(0.7, '#c04030');
-                        grad2.addColorStop(1, '#7a2218');
-                    } else {
-                        grad2.addColorStop(0, '#e0e0e0');
-                        grad2.addColorStop(0.6, '#2a2a2a');
-                        grad2.addColorStop(1, '#0a0a0a');
+                    // 绘制棋子图片 (xqwlight 风格)
+                    const imgName = PIECE_IMG[p];
+                    const img = pieceImages[imgName];
+                    if (img && img.complete && img.naturalWidth > 0) {
+                        const imgSize = cellSize * 0.92;
+                        ctx.drawImage(img, x - imgSize/2, y - imgSize/2, imgSize, imgSize);
                     }
-                    ctx.beginPath();
-                    ctx.arc(x, y, pieceRadius, 0, Math.PI*2);
-                    ctx.fillStyle = grad2;
-                    ctx.fill();
-                    ctx.shadowBlur = 0;
-                    ctx.shadowOffsetX = 0;
-                    ctx.shadowOffsetY = 0;
 
-                    ctx.strokeStyle = isRedSide ? '#5a1a0a' : '#1a1a1a';
-                    ctx.lineWidth = 1.5;
-                    ctx.stroke();
-
-                    ctx.beginPath();
-                    ctx.arc(x-5, y-7, 5, 0, Math.PI*2);
-                    ctx.fillStyle = isRedSide ? 'rgba(255,200,180,0.25)' : 'rgba(255,255,255,0.15)';
-                    ctx.fill();
-
-                    ctx.shadowBlur = 0;
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    const name = PIECE_NAMES[p] || p;
-                    ctx.font = `bold ${pieceRadius*1.2}px "KaiTi","STKaiti","SimSun",serif`;
-                    ctx.fillStyle = isRedSide ? '#fcf3e0' : '#e8e8e8';
-                    ctx.shadowColor = isRedSide ? 'rgba(80,0,0,0.6)' : 'rgba(0,0,0,0.7)';
-                    ctx.shadowBlur = 8;
-                    ctx.shadowOffsetX = 1;
-                    ctx.shadowOffsetY = 1;
-                    ctx.fillText(name, x, y+1);
-                    ctx.shadowBlur = 0;
-                    ctx.shadowOffsetX = 0;
-                    ctx.shadowOffsetY = 0;
-                    ctx.strokeStyle = isRedSide ? '#5a1a0a' : '#1a1a1a';
-                    ctx.lineWidth = 0.8;
-                    ctx.strokeText(name, x, y+1);
-                    ctx.fillStyle = isRedSide ? '#fcf3e0' : '#e8e8e8';
-                    ctx.fillText(name, x, y+1);
-
-                    if (isSelected) {
-                        ctx.strokeStyle = '#ffdd44';
-                        ctx.lineWidth = 3.5;
-                        const bx = x - pieceRadius - 4;
-                        const by = y - pieceRadius - 4;
-                        const bs = (pieceRadius + 4) * 2;
-                        ctx.beginPath();
-                        ctx.rect(bx, by, bs, bs);
-                        ctx.stroke();
+                    // 选中框：使用 oos.gif 覆盖
+                    if (isSelected && pieceImages['oos'] && pieceImages['oos'].complete && pieceImages['oos'].naturalWidth > 0) {
+                        const oosSize = cellSize * 0.94;
+                        ctx.drawImage(pieceImages['oos'], x - oosSize/2, y - oosSize/2, oosSize, oosSize);
                     }
                 }
             }
@@ -939,8 +919,8 @@
                 }
             }
 
-            // 绘制上一步走法框（起止格）
-            if (lastMove) {
+            // 绘制上一步走法框（起止格，使用 oos.gif）
+            if (lastMove && pieceImages['oos'] && pieceImages['oos'].complete && pieceImages['oos'].naturalWidth > 0) {
                 const lmFrom = getDisplay(lastMove.fromRow, lastMove.fromCol);
                 const lmTo = getDisplay(lastMove.toRow, lastMove.toCol);
                 const positions = [
@@ -950,14 +930,8 @@
                 for (const pos of positions) {
                     const lx = pos.col * cellSize + cellSize/2;
                     const ly = pos.row * cellSize + cellSize/2;
-                    ctx.strokeStyle = '#ff6600';
-                    ctx.lineWidth = 3.5;
-                    const bx = lx - pieceRadius - 4;
-                    const by = ly - pieceRadius - 4;
-                    const bs = (pieceRadius + 4) * 2;
-                    ctx.beginPath();
-                    ctx.rect(bx, by, bs, bs);
-                    ctx.stroke();
+                    const oosSize = cellSize * 0.94;
+                    ctx.drawImage(pieceImages['oos'], lx - oosSize/2, ly - oosSize/2, oosSize, oosSize);
                 }
             }
 
@@ -1080,26 +1054,28 @@
 
         // ---------- 初始化 ----------
         function init() {
-            resetGame();
-            canvas.addEventListener('click', handleCanvasClick);
-            canvas.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                handleCanvasClick(e);
-            });
-            document.getElementById('undoBtn').addEventListener('click', () => {
-                undoMove();
-                render();
-            });
-            document.getElementById('flipBtn').addEventListener('click', () => {
-                toggleFlip();
-                render();
-            });
-            document.getElementById('resetBtn').addEventListener('click', () => {
+            loadImages(function() {
                 resetGame();
-                render();
+                canvas.addEventListener('click', handleCanvasClick);
+                canvas.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    handleCanvasClick(e);
+                });
+                document.getElementById('undoBtn').addEventListener('click', () => {
+                    undoMove();
+                    render();
+                });
+                document.getElementById('flipBtn').addEventListener('click', () => {
+                    toggleFlip();
+                    render();
+                });
+                document.getElementById('resetBtn').addEventListener('click', () => {
+                    resetGame();
+                    render();
+                });
+                // 加载引擎 Worker（resetGame 内部会触发首次分析）
+                initWorker();
             });
-            // 加载引擎 Worker（resetGame 内部会触发首次分析）
-            initWorker();
         }
 
         init();
