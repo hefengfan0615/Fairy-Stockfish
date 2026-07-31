@@ -18,6 +18,11 @@ async function loadEngine() {
         // Set up output handlers BEFORE module initialization
         // (this is the pattern used by stockfish.js - nmrugg)
         const moduleArgs = {
+            // Explicitly locate WASM and worker files relative to this worker's URL.
+            // USE_ES6_IMPORT_META=0 can't auto-resolve paths in Worker context.
+            locateFile: (path) => {
+                return new URL('./' + path, import.meta.url).href;
+            },
             print: (line) => {
                 if (line.startsWith('info depth')) {
                     const data = parseInfoLine(line);
