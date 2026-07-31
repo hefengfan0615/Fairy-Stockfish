@@ -35,23 +35,29 @@
 #include "thread.h"
 #include "timeman.h"
 #include "uci.h"
-#include "incbin/incbin.h"
-
-
-// Macro to embed the default efficiently updatable neural network (NNUE) file
-// data in the engine binary (using incbin.h, by Dale Weiler).
-// This macro invocation will declare the following three variables
-//     const unsigned char        gEmbeddedNNUEData[];  // a pointer to the embedded data
-//     const unsigned char *const gEmbeddedNNUEEnd;     // a marker to the end
-//     const unsigned int         gEmbeddedNNUESize;    // the size of the embedded file
-// Note that this does not work in Microsoft Visual Studio.
-#if !defined(_MSC_VER) && !defined(NNUE_EMBEDDING_OFF)
-  INCBIN(EmbeddedNNUE, EvalFileDefaultName);
+// WASM target doesn't support inline assembly (INCBIN uses .section/.incbin asm directives).
+// Use a pre-generated C array header produced by `xxd -i` during the build step.
+#if defined(__EMSCRIPTEN__)
+  #include "nnue_embedded.h"
+  const unsigned char *const gEmbeddedNNUEEnd = gEmbeddedNNUEData + gEmbeddedNNUESize;
 #else
-  const unsigned char        gEmbeddedNNUEData[1] = {0x0};
-  [[maybe_unused]]
-  const unsigned char *const gEmbeddedNNUEEnd = &gEmbeddedNNUEData[1];
-  const unsigned int         gEmbeddedNNUESize = 1;
+  #include "incbin/incbin.h"
+
+  // Macro to embed the default efficiently updatable neural network (NNUE) file
+  // data in the engine binary (using incbin.h, by Dale Weiler).
+  // This macro invocation will declare the following three variables
+  //     const unsigned char        gEmbeddedNNUEData[];  // a pointer to the embedded data
+  //     const unsigned char *const gEmbeddedNNUEEnd;     // a marker to the end
+  //     const unsigned int         gEmbeddedNNUESize;    // the size of the embedded file
+  // Note that this does not work in Microsoft Visual Studio.
+  #if !defined(_MSC_VER) && !defined(NNUE_EMBEDDING_OFF)
+    INCBIN(EmbeddedNNUE, EvalFileDefaultName);
+  #else
+    const unsigned char        gEmbeddedNNUEData[1] = {0x0};
+    [[maybe_unused]]
+    const unsigned char *const gEmbeddedNNUEEnd = &gEmbeddedNNUEData[1];
+    const unsigned int         gEmbeddedNNUESize = 1;
+  #endif
 #endif
 
 

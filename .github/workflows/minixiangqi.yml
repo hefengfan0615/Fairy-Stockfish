@@ -39,6 +39,15 @@ jobs:
           version: ${{env.EM_VERSION}}
           actions-cache-folder: ${{env.EM_CACHE_FOLDER}}
 
+      - name: Generate NNUE embedded header (WASM can't use INCBIN asm)
+        run: |
+          xxd -i minixiangqi.nnue | sed \
+            -e 's/unsigned char/const unsigned char/g' \
+            -e 's/unsigned int/const unsigned int/g' \
+            -e 's/minixiangqi_nnue/gEmbeddedNNUEData/g' \
+            -e 's/minixiangqi_nnue_len/gEmbeddedNNUESize/g' \
+            > nnue_embedded.h
+
       - name: Build UCI WASM engine for Browser/Worker
         run: |
           emcc -o stockfish-web.js -s WASM=1 -s ENVIRONMENT='web,worker' \
