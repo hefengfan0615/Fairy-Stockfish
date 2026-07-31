@@ -39,12 +39,32 @@ jobs:
           version: ${{env.EM_VERSION}}
           actions-cache-folder: ${{env.EM_CACHE_FOLDER}}
 
-      - name: Build UCI WASM engine (Browser/Worker + Node.js test)
+      - name: Build UCI WASM engine for Browser/Worker
         run: |
-          emcc -o stockfish-web.js -s WASM=1 -s ENVIRONMENT='web,worker,node' \
+          emcc -o stockfish-web.js -s WASM=1 -s ENVIRONMENT='web,worker' \
+            -s USE_PTHREADS=1 -s PTHREAD_POOL_SIZE=2 -s EXIT_RUNTIME=0 \
+            -s MODULARIZE=1 -s EXPORT_ES6=1 -s USE_ES6_IMPORT_META=0 \
+            -s EXPORT_NAME='StockfishEngine' \
+            -s EXPORTED_FUNCTIONS='["_main","_command","_isReady"]' \
+            -s EXPORTED_RUNTIME_METHODS='["ccall"]' \
+            -s INITIAL_MEMORY=64MB -s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=1GB \
+            -DNDEBUG -DNNUE_EMBEDDING_OFF \
+            -DLARGEBOARDS -DPRECOMPUTED_MAGICS -DALLVARS \
+            -std=c++17 -O2 \
+            benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp main.cpp \
+            material.cpp misc.cpp movegen.cpp movepick.cpp pawns.cpp position.cpp psqt.cpp \
+            search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
+            nnue/evaluate_nnue.cpp nnue/features/half_ka_v2.cpp \
+            partner.cpp parser.cpp piece.cpp variant.cpp xboard.cpp \
+            nnue/features/half_ka_v2_variants.cpp \
+            -I. -Isyzygy -Innue -Innue/features
+
+      - name: Build UCI WASM engine for Node.js test
+        run: |
+          emcc -o stockfish-test.js -s WASM=1 -s ENVIRONMENT='web,worker,node' \
             -s USE_PTHREADS=1 -s PTHREAD_POOL_SIZE=2 -s EXIT_RUNTIME=0 \
             -s MODULARIZE=1 -s EXPORT_ES6=1 -s USE_ES6_IMPORT_META=1 \
-            -s EXPORT_NAME='StockfishEngine' \
+            -s EXPORT_NAME='StockfishTest' \
             -s EXPORTED_FUNCTIONS='["_main","_command","_isReady"]' \
             -s EXPORTED_RUNTIME_METHODS='["ccall"]' \
             -s INITIAL_MEMORY=64MB -s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=1GB \
@@ -74,9 +94,9 @@ jobs:
           let output = '';
           let gotBestmove = false;
 
-          import('./stockfish-web.js').then(async (module) => {
-            const StockfishEngine = module.default;
-            const engine = await StockfishEngine({
+          import('./stockfish-test.js').then(async (module) => {
+            const StockfishTest = module.default;
+            const engine = await StockfishTest({
               print: (line) => {
                 output += line + '\n';
                 process.stdout.write('[engine] ' + line + '\n');
