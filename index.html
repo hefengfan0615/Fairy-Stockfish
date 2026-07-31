@@ -206,9 +206,23 @@
         // ============================================================
 
         // ---------- Web Worker 引擎管理 ----------
+        // 每次走子/悔棋/新局时终止旧 Worker 并创建新 Worker，
+        // 引擎使用 "go infinite" 持续分析，不产生 bestmove。
         let analysisWorker = null;
 
-        function initWorker() {
+        function createWorker(fen, moves) {
+            // 终止旧 Worker
+            if (analysisWorker) {
+                analysisWorker.terminate();
+                analysisWorker = null;
+            }
+
+            // 清除旧分析数据
+            engineArrows = [];
+            lastAnalysisData = {};
+            document.getElementById('analysisInfo').innerHTML = '<span class="engine-status">引擎加载中...</span>';
+            document.getElementById('analysisPv').textContent = '';
+
             analysisWorker = new Worker('worker.js', { type: 'module' });
 
             analysisWorker.onmessage = function (e) {
@@ -217,14 +231,15 @@
                 switch (type) {
                     case 'ready':
                         document.getElementById('analysisInfo').innerHTML = '<span class="engine-status">引擎已就绪</span>';
-                        document.getElementById('analysisPv').textContent = '';
-                        // 初始分析
-                        sendPositionToWorker();
+                        // 引擎就绪后立即发送当前局面开始分析
+                        analysisWorker.postMessage({
+                            type: 'start',
+                            data: { fen, moves }
+                        });
                         break;
 
                     case 'analysis':
                         displayAnalysis(data);
-                        // 更新箭头渲染
                         render();
                         break;
 
@@ -240,24 +255,22 @@
         }
 
         function sendPositionToWorker() {
-            // 清除旧箭头，等待新分析
-            engineArrows = [];
-
-            if (!analysisWorker || gameOver) {
-                if (gameOver) {
-                    document.getElementById('analysisInfo').innerHTML = '<span class="engine-status">游戏已结束</span>';
-                    document.getElementById('analysisPv').textContent = '';
+            if (gameOver) {
+                if (analysisWorker) {
+                    analysisWorker.terminate();
+                    analysisWorker = null;
                 }
+                document.getElementById('analysisInfo').innerHTML = '<span class="engine-status">游戏已结束</span>';
+                document.getElementById('analysisPv').textContent = '';
+                engineArrows = [];
+                lastAnalysisData = {};
                 render();
                 return;
             }
 
-            // 初始局面 + moves 格式
+            // 初始局面 + moves 格式，创建新 Worker
             const uciMoves = moveHistory.map(m => m.uci);
-            analysisWorker.postMessage({
-                type: 'start',
-                data: { fen: INIT_FEN, moves: uciMoves }
-            });
+            createWorker(INIT_FEN, uciMoves);
         }
 
         function displayAnalysis(data) {
@@ -1085,8 +1098,7 @@
                 resetGame();
                 render(); updateInfo();
             });
-            // 加载引擎 Worker
-            initWorker();
+            // resetGame() 内部已调用 sendPositionToWorker() 启动引擎
         }
 
         init();

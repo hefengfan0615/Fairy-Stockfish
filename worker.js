@@ -1,13 +1,12 @@
 // Mini Xiangqi (迷你象棋) WASM Engine Worker
 // Uses Fairy-Stockfish UCI engine via stockfish-web.js for real analysis
 // Engine initialization pattern references stockfish.js (https://github.com/nmrugg/stockfish.js)
+//
+// Design: this worker is disposable — the main thread terminates and recreates it
+// on every board change. The engine runs "go infinite" so it never sends bestmove.
 
 let engine = null;
 let engineReady = false;
-let isSearching = false;
-let stopPending = false;
-let lastInfoData = null;
-let pendingSearch = null;
 
 // Load the engine module
 async function loadEngine() {
@@ -27,30 +26,14 @@ async function loadEngine() {
                 return new URL('./' + path, import.meta.url).href;
             },
             print: (line) => {
+                // Only forward info lines; go infinite never produces bestmove
                 if (line.startsWith('info depth')) {
                     const data = parseInfoLine(line);
                     if (data) {
-                        lastInfoData = data;
                         self.postMessage({
                             type: 'analysis',
                             data: data
                         });
-                    }
-                } else if (line.startsWith('bestmove')) {
-                    isSearching = false;
-                    stopPending = false;
-                    if (lastInfoData) {
-                        self.postMessage({
-                            type: 'analysis',
-                            data: lastInfoData,
-                            final: true
-                        });
-                    }
-                    // Process pending search if any
-                    if (pendingSearch) {
-                        const ps = pendingSearch;
-                        pendingSearch = null;
-                        doSearch(ps.fen, ps.moves);
                     }
                 }
             },
@@ -136,26 +119,14 @@ function parseInfoLine(line) {
 }
 
 function doSearch(fen, moves) {
-    // Stop current search if running (only send stop once)
-    if (isSearching) {
-        if (!stopPending) {
-            sendCommand('stop');
-            stopPending = true;
-        }
-        // Queue this search to run after bestmove
-        pendingSearch = { fen, moves };
-        return;
-    }
+    if (!engine || !engineReady) return;
 
     // Set up position using the FEN from the main thread
     const movesStr = moves && moves.length > 0 ? ' moves ' + moves.join(' ') : '';
     sendCommand('position fen ' + fen + movesStr);
 
-    // Start search
-    lastInfoData = null;
-    isSearching = true;
-    stopPending = false;
-    sendCommand('go depth 20');
+    // Start infinite search — never produces bestmove, just info lines
+    sendCommand('go infinite');
 }
 
 // Handle messages from main thread
