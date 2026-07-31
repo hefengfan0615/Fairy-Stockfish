@@ -41,12 +41,17 @@ jobs:
 
       - name: Generate NNUE embedded header (WASM can't use INCBIN asm)
         run: |
-          xxd -i minixiangqi.nnue | sed \
-            -e 's/minixiangqi_nnue_len/gEmbeddedNNUESize/g' \
-            -e 's/minixiangqi_nnue/gEmbeddedNNUEData/g' \
-            -e 's/unsigned char/const unsigned char/g' \
-            -e 's/unsigned int/const unsigned int/g' \
-            > nnue_embedded.h
+          python3 -c "
+          import sys
+          data = open('minixiangqi.nnue', 'rb').read()
+          sys.stdout.write('const unsigned char gEmbeddedNNUEData[] = {')
+          for i, b in enumerate(data):
+              if i % 12 == 0:
+                  sys.stdout.write('\n  ')
+              sys.stdout.write('0x%02x, ' % b)
+          sys.stdout.write('\n};\n')
+          sys.stdout.write('const unsigned int gEmbeddedNNUESize = %d;\n' % len(data))
+          " > nnue_embedded.h
 
       - name: Build UCI WASM engine for Browser/Worker
         run: |
