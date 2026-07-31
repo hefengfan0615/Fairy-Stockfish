@@ -153,7 +153,7 @@ jobs:
             }
           }, 120000);
           JSEOF
-          timeout 180 node --experimental-wasm-threads test_engine.mjs 2>&1 || true
+          timeout 180 node test_engine.mjs 2>&1 || true
           if [ -f /tmp/test_pass ]; then
             echo "TEST PASSED"
             exit 0
