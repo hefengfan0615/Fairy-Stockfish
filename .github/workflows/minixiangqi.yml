@@ -48,7 +48,7 @@ jobs:
             -s EXPORTED_FUNCTIONS='["_main","_command","_isReady"]' \
             -s EXPORTED_RUNTIME_METHODS='["ccall"]' \
             -s INITIAL_MEMORY=64MB -s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=1GB \
-            -DNDEBUG -DNNUE_EMBEDDING_OFF \
+            -DNDEBUG \
             -DLARGEBOARDS -DPRECOMPUTED_MAGICS -DALLVARS \
             -std=c++17 -O2 \
             benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp main.cpp \
@@ -68,7 +68,7 @@ jobs:
             -s EXPORTED_FUNCTIONS='["_main","_command","_isReady"]' \
             -s EXPORTED_RUNTIME_METHODS='["ccall"]' \
             -s INITIAL_MEMORY=64MB -s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=1GB \
-            -DNDEBUG -DNNUE_EMBEDDING_OFF \
+            -DNDEBUG \
             -DLARGEBOARDS -DPRECOMPUTED_MAGICS -DALLVARS \
             -std=c++17 -O2 \
             benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp main.cpp \
