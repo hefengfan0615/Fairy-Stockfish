@@ -40,10 +40,9 @@ using namespace Stockfish;
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 
-// Emscripten: bypass stdin entirely. Commands are sent via ccall("command", ...) from JS,
-// keeping the main thread free to process proxied search output.
-// With PROXY_TO_PTHREAD, main() runs on a pthread. After init, emscripten_set_main_loop
-// keeps the pthread alive to process proxied _command() calls.
+// Emscripten: bypass stdin entirely. Commands are sent via ccall("command", ...) from JS.
+// After init, main() returns and the runtime stays alive (EXIT_RUNTIME=0),
+// allowing _command() calls to be processed on the main thread.
 static Position* emPos = nullptr;
 static StateListPtr emStates;
 static std::vector<Move> emBanmoves;
@@ -98,18 +97,16 @@ int main(int argc, char* argv[]) {
   if (envVariantPath != NULL)
       Options["VariantPath"] = std::string(envVariantPath);
 
-  // Do NOT call UCI::loop() - it would block on getline() and prevent
-  // proxied search output from being processed. Commands come via _command().
+  // Do NOT call UCI::loop() - it would block on getline().
+  // Commands come via _command() from JS.
+  // With EXIT_RUNTIME=0, returning from main() keeps the runtime alive
+  // so that _command() calls can be processed on the main thread.
   emReady = true;
-  // Keep the pthread alive to process proxied _command() calls.
-  // emscripten_set_main_loop never returns.
-  emscripten_set_main_loop([](){}, 0, 1);
 #else
   UCI::loop(argc, argv);
 #endif
 
-  // NOTE: Under __EMSCRIPTEN__, emscripten_set_main_loop never returns,
-  // so this cleanup code is only reached for native builds.
+  // Cleanup code is only reached for native builds (not __EMSCRIPTEN__).
 #ifndef __EMSCRIPTEN__
   Threads.set(0);
   variants.clear_all();
