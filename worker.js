@@ -2,8 +2,8 @@
 // Uses Fairy-Stockfish UCI engine via stockfish-web.js for real analysis
 // Engine initialization pattern references stockfish.js (https://github.com/nmrugg/stockfish.js)
 //
-// Design: this worker is disposable — the main thread terminates and recreates it
-// on every board change. The engine runs "go infinite" so it never sends bestmove.
+// Design: single persistent worker. On board change, the main thread sends
+// a new position; the worker issues stop → position → go infinite.
 
 let engine = null;
 let engineReady = false;
@@ -26,7 +26,7 @@ async function loadEngine() {
                 return new URL('./' + path, import.meta.url).href;
             },
             print: (line) => {
-                // Only forward info lines; go infinite never produces bestmove
+                // Forward info lines; ignore bestmove (we use go infinite)
                 if (line.startsWith('info depth')) {
                     const data = parseInfoLine(line);
                     if (data) {
@@ -121,11 +121,14 @@ function parseInfoLine(line) {
 function doSearch(fen, moves) {
     if (!engine || !engineReady) return;
 
-    // Set up position using the FEN from the main thread
+    // Stop any ongoing search first
+    sendCommand('stop');
+
+    // Set up new position
     const movesStr = moves && moves.length > 0 ? ' moves ' + moves.join(' ') : '';
     sendCommand('position fen ' + fen + movesStr);
 
-    // Start infinite search — never produces bestmove, just info lines
+    // Start infinite search
     sendCommand('go infinite');
 }
 

@@ -139,11 +139,15 @@
             font-family: 'Courier New', 'PingFang SC', monospace;
             font-size: 14px;
             color: #2d1f0e;
-            min-height: 52px;
+            height: 72px;
+            overflow: hidden;
         }
         .analysis-info {
             font-weight: 600;
             line-height: 1.6;
+            height: 22px;
+            overflow: hidden;
+            white-space: nowrap;
         }
         .analysis-info .label {
             color: #4a3520;
@@ -157,7 +161,10 @@
         .analysis-pv {
             margin-top: 4px;
             line-height: 1.5;
-            word-break: break-all;
+            height: 24px;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
             font-size: 15px;
         }
         .engine-status {
@@ -206,23 +213,10 @@
         // ============================================================
 
         // ---------- Web Worker 引擎管理 ----------
-        // 每次走子/悔棋/新局时终止旧 Worker 并创建新 Worker，
-        // 引擎使用 "go infinite" 持续分析，不产生 bestmove。
+        // 全程只用一个 Worker，棋盘变化时发送 stop → position → go infinite
         let analysisWorker = null;
 
-        function createWorker(fen, moves) {
-            // 终止旧 Worker
-            if (analysisWorker) {
-                analysisWorker.terminate();
-                analysisWorker = null;
-            }
-
-            // 清除旧分析数据
-            engineArrows = [];
-            lastAnalysisData = {};
-            document.getElementById('analysisInfo').innerHTML = '<span class="engine-status">引擎加载中...</span>';
-            document.getElementById('analysisPv').textContent = '';
-
+        function initWorker() {
             analysisWorker = new Worker('worker.js', { type: 'module' });
 
             analysisWorker.onmessage = function (e) {
@@ -231,11 +225,9 @@
                 switch (type) {
                     case 'ready':
                         document.getElementById('analysisInfo').innerHTML = '<span class="engine-status">引擎已就绪</span>';
-                        // 引擎就绪后立即发送当前局面开始分析
-                        analysisWorker.postMessage({
-                            type: 'start',
-                            data: { fen, moves }
-                        });
+                        document.getElementById('analysisPv').textContent = '';
+                        // 初始分析
+                        sendPositionToWorker();
                         break;
 
                     case 'analysis':
@@ -250,27 +242,28 @@
                 }
             };
 
-            // 发送初始化消息
             analysisWorker.postMessage({ type: 'init' });
         }
 
         function sendPositionToWorker() {
-            if (gameOver) {
-                if (analysisWorker) {
-                    analysisWorker.terminate();
-                    analysisWorker = null;
+            engineArrows = [];
+            lastAnalysisData = {};
+
+            if (!analysisWorker || gameOver) {
+                if (gameOver) {
+                    document.getElementById('analysisInfo').innerHTML = '<span class="engine-status">游戏已结束</span>';
+                    document.getElementById('analysisPv').textContent = '';
                 }
-                document.getElementById('analysisInfo').innerHTML = '<span class="engine-status">游戏已结束</span>';
-                document.getElementById('analysisPv').textContent = '';
-                engineArrows = [];
-                lastAnalysisData = {};
                 render();
                 return;
             }
 
-            // 初始局面 + moves 格式，创建新 Worker
+            // 发送 stop → position → go infinite
             const uciMoves = moveHistory.map(m => m.uci);
-            createWorker(INIT_FEN, uciMoves);
+            analysisWorker.postMessage({
+                type: 'start',
+                data: { fen: INIT_FEN, moves: uciMoves }
+            });
         }
 
         function displayAnalysis(data) {
@@ -293,8 +286,8 @@
             let scoreDisplay = '';
             if (scoreType === 'cp') {
                 const cp = parseInt(score);
-                if (cp > 0) scoreDisplay = '+' + (cp / 100).toFixed(2);
-                else scoreDisplay = (cp / 100).toFixed(2);
+                if (cp > 0) scoreDisplay = '+' + cp;
+                else scoreDisplay = cp.toString();
             } else if (scoreType === 'mate') {
                 const mateVal = parseInt(score);
                 scoreDisplay = '#' + Math.abs(mateVal);
@@ -1098,7 +1091,8 @@
                 resetGame();
                 render(); updateInfo();
             });
-            // resetGame() 内部已调用 sendPositionToWorker() 启动引擎
+            // 加载引擎 Worker（resetGame 内部会触发首次分析）
+            initWorker();
         }
 
         init();
